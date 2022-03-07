@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <new>
 
 #ifdef CAT_IMPL
 #define CAT_API __declspec(dllexport)
@@ -52,12 +53,10 @@ class ITable : virtual public IObject {
     virtual size_t size() const noexcept = 0;
 };
 
-CAT_API ITable* create_table(size_t reserve_capacity = 0);
-
 class IBytes : virtual public IObject {
   protected:
-    void* buf;
-    size_t len;
+    void* buf{nullptr};
+    size_t len{0};
 
   public:
     void* data() noexcept {
@@ -71,29 +70,33 @@ class IBytes : virtual public IObject {
     size_t size() const noexcept {
         return len;
     }
-
-  protected:
-    IBytes(void* buf, size_t len): buf(buf), len(len) {}
 };
 
-CAT_API IBytes* create_bytes(const void* data, size_t len);
+class IAlignedBytes : virtual public IBytes {
+  public:
+    static constexpr std::align_val_t alignment = static_cast<std::align_val_t>(64);
+};
 
 class IIntegerArray : virtual public IObject {
+  public:
     virtual size_t get_array(int64_t* out) noexcept = 0;
     virtual size_t get_array(const int64_t* out) const noexcept = 0;
 
     virtual void set_array(int64_t* in, size_t len, bool extend) = 0;
 };
 
-CAT_API IIntegerArray* create_integer_array(size_t reserve_capacity = 0);
-
 class INumberArray : virtual public IObject {
+  public:
     virtual size_t get_array(double* out) noexcept = 0;
     virtual size_t get_array(const double* out) const noexcept = 0;
 
     virtual void set_array(double* in, size_t len, bool extend) = 0;
 };
 
-CAT_API INumberArray* create_number_array(size_t reserve_capacity = 0);
+class INucleus : virtual public IObject {
+  public:
+    virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
+    virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
+};
 
 } // namespace catsyn
