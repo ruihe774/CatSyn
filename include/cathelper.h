@@ -1,10 +1,13 @@
 #pragma once
 
+#include <cstddef>
+#include <memory>
 #include <type_traits>
 
 #include <catsyn.h>
 
 namespace catsyn {
+
 template<typename T> class cat_ptr {
     T* m_ptr;
 
@@ -150,4 +153,51 @@ template<typename T> class cat_ptr {
         return dynamic_cast<U*>(m_ptr);
     }
 };
+
+template<typename T> cat_ptr<T> make_cat_ptr(T* p) {
+    return p;
+}
+
+namespace detail {
+
+class Object : virtual public catsyn::IObject {
+  private:
+    void drop() noexcept final {
+        delete this;
+    }
+};
+
+class OwnedBytes final : public Object, public IBytes {
+    std::unique_ptr<std::byte[]> ptr;
+
+  public:
+    OwnedBytes(std::unique_ptr<std::byte[]>&& ptr, size_t len) : IBytes(ptr.get(), len), ptr(std::move(ptr)) {}
+};
+
+class SharedBytes final : public Object, public IBytes {
+    std::shared_ptr<std::byte[]> ptr;
+
+  public:
+    SharedBytes(std::shared_ptr<std::byte[]> ptr, size_t len) : IBytes(ptr.get(), len), ptr(std::move(ptr)) {}
+};
+
+class BorrowedBytes final : public Object, public IBytes {
+  public:
+    BorrowedBytes(void* buf, size_t len) : IBytes(buf, len) {}
+};
+
+} // namespace detail
+
+IBytes* create_bytes(std::unique_ptr<std::byte[]>&& p, size_t len) {
+    return new detail::OwnedBytes(std::move(p), len);
+}
+
+IBytes* create_bytes(std::shared_ptr<std::byte[]> p, size_t len) {
+    return new detail::SharedBytes(std::move(p), len);
+}
+
+IBytes* create_bytes_borrowed(void* buf, size_t len) {
+    return new detail::BorrowedBytes(buf, len);
+}
+
 } // namespace catsyn

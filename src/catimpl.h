@@ -1,10 +1,8 @@
 #pragma once
 
-#include <catsyn.h>
+#define CAT_IMPL
 
-class CatImpl : public catsyn::Object {
-  private:
-    void drop() noexcept final {
-        delete this;
-    }
-};
+#include <catsyn.h>
+#include <cathelper.h>
+
+using catsyn::detail::Object;
