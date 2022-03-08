@@ -147,4 +147,6 @@ class IFrame : virtual public IObject {
     virtual void set_frame_props(const ITable* props) noexcept = 0;
 };
 
+CAT_API void create_nucleus(INucleus** out);
+
 } // namespace catsyn
