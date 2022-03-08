@@ -235,6 +235,8 @@ template<typename T> class BytesView<T, true> {
     typedef const T* const_pointer;
     typedef T* iterator;
     typedef const T* const_iterator;
+    typedef T& reference;
+    typedef const T& const_reference;
 
     static constexpr size_t bytes_per_sample = sizeof(T);
 
@@ -270,6 +272,10 @@ template<typename T> class BytesView<T, true> {
     const_iterator end() const noexcept {
         return begin() + size();
     }
+
+    const_reference operator[](size_t idx) const noexcept {
+        return data()[idx];
+    }
 };
 
 template<typename T> class BytesView<T, false> : public BytesView<T, true> {
@@ -281,9 +287,11 @@ template<typename T> class BytesView<T, false> : public BytesView<T, true> {
     using typename Base::bytes_type;
     using typename Base::const_iterator;
     using typename Base::const_pointer;
+    using typename Base::const_reference;
     using typename Base::element_type;
     using typename Base::iterator;
     using typename Base::pointer;
+    using typename Base::reference;
 
     pointer data() noexcept {
         return static_cast<pointer>(this->bytes->data());
@@ -295,6 +303,10 @@ template<typename T> class BytesView<T, false> : public BytesView<T, true> {
 
     iterator end() noexcept {
         return begin() + this->size();
+    }
+
+    reference operator[](size_t idx) noexcept {
+        return data()[idx];
     }
 };
 
@@ -329,7 +341,7 @@ template<typename T> class TableView<T, true> {
     }
 
     template<typename U> catsyn::BytesView<const U> get_array(const char* key) const {
-        return catsyn::BytesView<const U> {get<IBytes>(key)};
+        return catsyn::BytesView<const U>{get<IBytes>(key)};
     }
 
     size_t size() const noexcept {
@@ -341,8 +353,8 @@ template<typename T> class TableView<T, false> : public TableView<T, true> {
     typedef TableView<T, true> Base;
 
   public:
-    using typename Base::table_type;
     using Base::TableView;
+    using typename Base::table_type;
 
   public:
     void set(const char* key, const IObject* in) noexcept {
@@ -367,8 +379,7 @@ template<typename T> class TableView<T, false> : public TableView<T, true> {
         this->table->set_key(ref, nullptr);
     }
 
-    template<typename U>
-    cat_ptr<U> modify(const char* key) {
+    template<typename U> cat_ptr<U> modify(const char* key) {
         auto ref = this->table->get_ref(key);
         if (ref == ITable::npos)
             return nullptr;
@@ -383,7 +394,7 @@ template<typename T> class TableView<T, false> : public TableView<T, true> {
     }
 };
 
-}
+} // namespace detail
 
 template<typename T> using TableView = detail::TableView<T, std::is_const_v<T>>;
 
