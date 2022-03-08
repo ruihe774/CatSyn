@@ -2,8 +2,8 @@
 
 #include <cstddef>
 #include <memory>
-#include <type_traits>
 #include <stdexcept>
+#include <type_traits>
 
 #include <catsyn.h>
 
@@ -217,22 +217,42 @@ inline cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned
     return {out, false};
 }
 
-template<typename T, bool mut = false> class BytesView1D {
+namespace detail {
+
+template<typename T, bool c> struct add_const_if {};
+template<typename T> struct add_const_if<T, true> { typedef std::add_const_t<T> type; };
+template<typename T> struct add_const_if<T, false> { typedef T type; };
+template<typename T, bool c> using add_const_if_t = typename add_const_if<T, c>::type;
+template<typename To, typename From> using transfer_const_t = add_const_if_t<To, std::is_const_v<From>>;
+
+template<typename T, bool immutable> class BytesView {};
+
+template<typename T> class BytesView<T, true> {
   public:
-    typedef const IBytes bytes_type;
-    typedef const T element_type;
-    typedef const T* pointer;
+    typedef transfer_const_t<IBytes, T> bytes_type;
+    typedef T element_type;
+    typedef T* pointer;
     typedef const T* const_pointer;
-    typedef const T* iterator;
+    typedef T* iterator;
     typedef const T* const_iterator;
 
     static constexpr size_t bytes_per_sample = sizeof(T);
 
     cat_ptr<bytes_type> bytes;
 
-    explicit BytesView1D(bytes_type* bytes) noexcept : bytes(bytes) {
+  private:
+    void check_size() const {
         if (bytes->size() % bytes_per_sample)
             throw std::invalid_argument("invalid bytes size");
+    }
+
+  public:
+    explicit BytesView(bytes_type* bytes) noexcept : bytes(bytes) {
+        check_size();
+    }
+
+    explicit BytesView(cat_ptr<bytes_type> bytes) noexcept : bytes(std::move(bytes)) {
+        check_size();
     }
 
     const_pointer data() const noexcept {
@@ -252,42 +272,21 @@ template<typename T, bool mut = false> class BytesView1D {
     }
 };
 
-template<typename T> class BytesView1D<T, true> {
+template<typename T> class BytesView<T, false> : public BytesView<T, true> {
+    typedef BytesView<T, true> Base;
+
   public:
-    typedef IBytes bytes_type;
-    typedef T element_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    typedef T* iterator;
-    typedef const T* const_iterator;
-
-    static constexpr size_t bytes_per_sample = sizeof(T);
-
-    cat_ptr<bytes_type> bytes;
-
-    explicit BytesView1D(bytes_type* bytes) noexcept : bytes(bytes) {
-        if (bytes->size() % bytes_per_sample)
-            throw std::invalid_argument("invalid bytes size");
-    }
-
-    const_pointer data() const noexcept {
-        return static_cast<const_pointer>(bytes->data());
-    }
-
-    size_t size() const noexcept {
-        return bytes->size() / bytes_per_sample;
-    }
-
-    const_iterator begin() const noexcept {
-        return data();
-    }
-
-    const_iterator end() const noexcept {
-        return begin() + size();
-    }
+    using Base::bytes_per_sample;
+    using Base::BytesView;
+    using typename Base::bytes_type;
+    using typename Base::const_iterator;
+    using typename Base::const_pointer;
+    using typename Base::element_type;
+    using typename Base::iterator;
+    using typename Base::pointer;
 
     pointer data() noexcept {
-        return static_cast<pointer>(bytes->data());
+        return static_cast<pointer>(this->bytes->data());
     }
 
     iterator begin() noexcept {
@@ -295,8 +294,12 @@ template<typename T> class BytesView1D<T, true> {
     }
 
     iterator end() noexcept {
-        return begin() + size();
+        return begin() + this->size();
     }
 };
+
+} // namespace detail
+
+template<typename T> using BytesView = detail::BytesView<T, std::is_const_v<T>>;
 
 } // namespace catsyn
