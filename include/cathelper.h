@@ -302,4 +302,89 @@ template<typename T> class BytesView<T, false> : public BytesView<T, true> {
 
 template<typename T> using BytesView = detail::BytesView<T, std::is_const_v<T>>;
 
+namespace detail {
+
+template<typename T, bool immutable> class TableView {};
+
+template<typename T> class TableView<T, true> {
+  public:
+    typedef std::enable_if_t<std::is_same_v<ITable, std::remove_const_t<T>>, T> table_type;
+
+    cat_ptr<table_type> table;
+
+    explicit TableView(table_type* table) noexcept : table(table) {}
+    explicit TableView(cat_ptr<table_type> table) noexcept : table(std::move(table)) {}
+
+  protected:
+    template<typename U> cat_ptr<const U> get(size_t ref) const {
+        if (cat_ptr<const IObject> p = table->get(ref); p)
+            return p.query<const U>();
+        else
+            return nullptr;
+    }
+
+  public:
+    template<typename U> cat_ptr<const U> get(const char* key) const {
+        return get<U>(table->get_ref(key));
+    }
+
+    template<typename U> catsyn::BytesView<const U> get_array(const char* key) const {
+        return catsyn::BytesView<const U> {get<IBytes>(key)};
+    }
+
+    size_t size() const noexcept {
+        return table->size();
+    }
+};
+
+template<typename T> class TableView<T, false> : public TableView<T, true> {
+    typedef TableView<T, true> Base;
+
+  public:
+    using typename Base::table_type;
+    using Base::TableView;
+
+  public:
+    void set(const char* key, const IObject* in) noexcept {
+        auto ref = this->table->get_ref(key);
+        if (ref == ITable::npos) {
+            ref = this->size();
+            this->table->set_key(ref, key);
+        }
+        this->table->set(ref, in);
+    }
+
+    template<typename U> void set(const char* key, const cat_ptr<U>& in) noexcept {
+        set(key, in.get());
+    }
+
+    void del(const char* key) noexcept {
+        // actually it leases holes
+        auto ref = this->table->get_ref(key);
+        if (ref == ITable::npos)
+            return;
+        this->table->set(ref, nullptr);
+        this->table->set_key(ref, nullptr);
+    }
+
+    template<typename U>
+    cat_ptr<U> modify(const char* key) {
+        auto ref = this->table->get_ref(key);
+        if (ref == ITable::npos)
+            return nullptr;
+        auto p = this->table->get(ref);
+        if (p->is_unique())
+            return make_cat_ptr(const_cast<IObject*>(p)).template query<U>();
+        else {
+            auto new_p = make_cat_ptr(p).template query<const U>().clone();
+            this->table->set(ref, new_p.get());
+            return new_p;
+        }
+    }
+};
+
+}
+
+template<typename T> using TableView = detail::TableView<T, std::is_const_v<T>>;
+
 } // namespace catsyn
