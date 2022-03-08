@@ -192,12 +192,12 @@ inline unsigned plane_height(FrameInfo fi, unsigned idx) noexcept {
     return fi.height >> (idx ? fi.format.detail.height_subsampling : 0u);
 }
 
-inline uintptr_t width_bytes(FrameInfo fi, unsigned idx) noexcept {
-    return static_cast<uintptr_t>(plane_width(fi, idx)) * bytes_per_sample(fi.format);
+inline size_t width_bytes(FrameInfo fi, unsigned idx) noexcept {
+    return static_cast<size_t>(plane_width(fi, idx)) * bytes_per_sample(fi.format);
 }
 
-inline uintptr_t default_stride(FrameInfo fi, unsigned idx) noexcept {
-    auto align = static_cast<uintptr_t>(IAlignedBytes::alignment);
+inline size_t default_stride(FrameInfo fi, unsigned idx) noexcept {
+    auto align = static_cast<size_t>(IAlignedBytes::alignment);
     auto stride = (width_bytes(fi, idx) + align - 1u) / align * align;
     return stride;
 }
@@ -206,7 +206,7 @@ cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned int co
     auto fi = src->get_frame_info();
     auto count = num_planes(fi.format);
     const IAlignedBytes* planes[32];
-    uintptr_t strides[32];
+    size_t strides[32];
     for (unsigned idx = 0; idx < count; ++idx, copy_mask >>= 1) {
         planes[idx] = copy_mask & 1 ? src->get_plane(idx) : nullptr;
         strides[idx] = copy_mask & 1 ? src->get_stride(idx) : 0;
@@ -215,5 +215,87 @@ cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned int co
     factory->create_frame(fi, planes, strides, src->get_frame_props(), &out);
     return {out, false};
 }
+
+template<typename T, bool mut = false> class BytesView1D {
+  public:
+    typedef const IBytes bytes_type;
+    typedef const T element_type;
+    typedef const T* pointer;
+    typedef const T* const_pointer;
+    typedef const T* iterator;
+    typedef const T* const_iterator;
+
+    static constexpr size_t bytes_per_sample = sizeof(T);
+
+    cat_ptr<bytes_type> bytes;
+
+    explicit BytesView1D(bytes_type* bytes) noexcept : bytes(bytes) {
+        if (bytes->size() % bytes_per_sample)
+            throw std::invalid_argument("invalid bytes size");
+    }
+
+    const_pointer data() const noexcept {
+        return static_cast<const T*>(bytes->data());
+    }
+
+    size_t size() const noexcept {
+        return bytes->size() / bytes_per_sample;
+    }
+
+    const_iterator begin() const noexcept {
+        return data();
+    }
+
+    const_iterator end() const noexcept {
+        return begin() + size();
+    }
+};
+
+template<typename T> class BytesView1D<T, true> {
+  public:
+    typedef IBytes bytes_type;
+    typedef T element_type;
+    typedef T* pointer;
+    typedef const T* const_pointer;
+    typedef T* iterator;
+    typedef const T* const_iterator;
+
+    static constexpr size_t bytes_per_sample = sizeof(T);
+
+    cat_ptr<bytes_type> bytes;
+
+    explicit BytesView1D(bytes_type* bytes) noexcept : bytes(bytes) {
+        if (bytes->size() % bytes_per_sample)
+            throw std::invalid_argument("invalid bytes size");
+    }
+
+    const_pointer data() const noexcept {
+        return static_cast<const_pointer>(bytes->data());
+    }
+
+    size_t size() const noexcept {
+        return bytes->size() / bytes_per_sample;
+    }
+
+    const_iterator begin() const noexcept {
+        return data();
+    }
+
+    const_iterator end() const noexcept {
+        return begin() + size();
+    }
+
+    pointer data() noexcept {
+        return static_cast<pointer>(bytes->data());
+    }
+
+    iterator begin() noexcept {
+        return data();
+    }
+
+    iterator end() noexcept {
+        return begin() + size();
+    }
+};
 
 } // namespace catsyn

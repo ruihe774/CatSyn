@@ -79,20 +79,6 @@ class IAlignedBytes : virtual public IBytes {
     static constexpr std::align_val_t alignment = static_cast<std::align_val_t>(64);
 };
 
-class IIntegerArray : virtual public IObject {
-  public:
-    virtual size_t get_array(int64_t* out) noexcept = 0;
-    virtual size_t get_array(const int64_t* out) const noexcept = 0;
-    virtual void set_array(int64_t* in, size_t len, bool extend) noexcept = 0;
-};
-
-class INumberArray : virtual public IObject {
-  public:
-    virtual size_t get_array(double* out) noexcept = 0;
-    virtual size_t get_array(const double* out) const noexcept = 0;
-    virtual void set_array(double* in, size_t len, bool extend) noexcept = 0;
-};
-
 struct FrameInfo;
 class IFrame;
 
@@ -102,11 +88,9 @@ class IFactory : virtual public IObject {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
     virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
-    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
+    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
-    virtual void create_integer_array(size_t reserve_capacity, IIntegerArray** out) noexcept = 0;
-    virtual void create_number_array(size_t reserve_capacity, INumberArray** out) noexcept = 0;
 };
 
 enum class SampleType {
@@ -152,11 +136,11 @@ class IFrame : virtual public IObject {
   public:
     virtual const IAlignedBytes* get_plane(unsigned idx) const noexcept = 0;
     virtual IAlignedBytes* get_plane_mut(unsigned idx) noexcept = 0;
-    virtual void set_plane(unsigned idx, const IAlignedBytes* in, uintptr_t stride) noexcept = 0;
+    virtual void set_plane(unsigned idx, const IAlignedBytes* in, size_t stride) noexcept = 0;
 
     virtual FrameInfo get_frame_info() const noexcept = 0;
 
-    virtual uintptr_t get_stride(unsigned idx) const noexcept = 0;
+    virtual size_t get_stride(unsigned idx) const noexcept = 0;
 
     virtual const ITable* get_frame_props() const noexcept = 0;
     virtual ITable* get_frame_props_mut() noexcept = 0;

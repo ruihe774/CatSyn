@@ -79,7 +79,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
 
     FrameInfo fi;
     std::array<cat_ptr<const IAlignedBytes>, max_plane_count> planes;
-    std::array<uintptr_t, max_plane_count> strides;
+    std::array<size_t, max_plane_count> strides;
     cat_ptr<const ITable> props;
 
     void check_idx(unsigned idx) const {
@@ -101,7 +101,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
         return plane_mut.get();
     }
 
-    void set_plane(unsigned idx, const IAlignedBytes* in, uintptr_t stride) noexcept final {
+    void set_plane(unsigned idx, const IAlignedBytes* in, size_t stride) noexcept final {
         check_idx(idx);
         planes[idx] = in;
         strides[idx] = stride;
@@ -111,7 +111,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
         return fi;
     }
 
-    uintptr_t get_stride(unsigned idx) const noexcept final {
+    size_t get_stride(unsigned idx) const noexcept final {
         check_idx(idx);
         return strides[idx];
     }
@@ -130,7 +130,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
         props = new_props;
     }
 
-    Frame(Nucleus& nucl, FrameInfo fi, const IAlignedBytes** in_planes, const uintptr_t* in_strides,
+    Frame(Nucleus& nucl, FrameInfo fi, const IAlignedBytes** in_planes, const size_t* in_strides,
           const ITable* in_props) noexcept
         : Shuttle(nucl), fi(fi) {
         auto count = num_planes(fi.format);
@@ -157,7 +157,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
     }
 };
 
-void Nucleus::create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
+void Nucleus::create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                            IFrame** out) noexcept {
     *out = new Frame(*this, fi, planes, strides, props);
     (*out)->add_ref();
