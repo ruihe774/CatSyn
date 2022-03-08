@@ -9,53 +9,55 @@
 
 using namespace catsyn;
 
-class AllocHolder {
-  protected:
-    AllocStat& alloc_stat;
-    explicit AllocHolder(AllocStat& stat) noexcept : alloc_stat(stat) {}
-};
-
-class Bytes final : public Object, public IBytes, public AllocHolder {
+class Bytes final : public Object, public IBytes, public Shuttle {
   public:
-    Bytes(AllocStat& alloc_stat, const void* data, size_t len) noexcept : AllocHolder(alloc_stat) {
-        auto p = operator new(len);
-        if (data)
-            memcpy(p, data, len);
-        this->buf = p;
+    Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
+        this->buf = operator new(len);
         this->len = len;
-        alloc_stat.alloc(len);
+        this->nucl.alloc_stat.alloc(len);
+        if (data)
+            memcpy(this->buf, data, len);
     }
 
     ~Bytes() final {
         operator delete(this->buf);
-        alloc_stat.free(len);
+        this->nucl.alloc_stat.free(len);
+    }
+
+    void clone(IObject** out) const noexcept final {
+        *out = new Bytes(this->nucl, this->buf, this->len);
+        (*out)->add_ref();
     }
 };
 
-class AlignedBytes final : public Object, public IAlignedBytes, public AllocHolder {
+class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
   public:
-    AlignedBytes(AllocStat& alloc_stat, const void* data, size_t len) noexcept : AllocHolder(alloc_stat) {
-        auto p = operator new(len, alignment);
-        if (data)
-            memcpy(p, data, len);
-        this->buf = p;
+    AlignedBytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
+        this->buf = operator new(len, alignment);
         this->len = len;
-        alloc_stat.alloc(len);
+        this->nucl.alloc_stat.alloc(len);
+        if (data)
+            memcpy(this->buf, data, len);
     }
 
     ~AlignedBytes() final {
         operator delete(this->buf, alignment);
-        alloc_stat.free(len);
+        this->nucl.alloc_stat.free(len);
+    }
+
+    void clone(IObject** out) const noexcept final {
+        *out = new AlignedBytes(this->nucl, this->buf, this->len);
+        (*out)->add_ref();
     }
 };
 
 void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept {
-    *out = new Bytes(alloc_stat, data, len);
+    *out = new Bytes(*this, data, len);
     (*out)->add_ref();
 }
 
 void Nucleus::create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept {
-    *out = new AlignedBytes(alloc_stat, data, len);
+    *out = new AlignedBytes(*this, data, len);
     (*out)->add_ref();
 }
 
@@ -68,20 +70,20 @@ void AllocStat::free(size_t size) noexcept {
 }
 
 size_t AllocStat::get_current() const noexcept {
-    return current.load(std::memory_order_acq_rel);
+    // precision is not important
+    return current.load(std::memory_order_relaxed);
 }
 
-class Frame final : public Object, public IFrame {
+class Frame final : public Object, public IFrame, public Shuttle {
     static constexpr unsigned max_plane_count = 3;
 
-    INucleus* nucl;
     FrameInfo fi;
-    std::array<cat_ptr<IAlignedBytes>, max_plane_count> planes;
+    std::array<cat_ptr<const IAlignedBytes>, max_plane_count> planes;
     std::array<uintptr_t, max_plane_count> strides;
-    cat_ptr<ITable> props;
+    cat_ptr<const ITable> props;
 
     void check_idx(unsigned idx) const {
-        if (idx >= this->get_plane_count())
+        if (idx >= num_planes(fi.format))
             throw std::out_of_range("plane index out of range");
     }
 
@@ -94,15 +96,12 @@ class Frame final : public Object, public IFrame {
     IAlignedBytes* get_plane_mut(unsigned idx) noexcept final {
         check_idx(idx);
         auto& plane = planes[idx];
-        if (plane->is_locked()) {
-            cat_ptr<IAlignedBytes> new_plane;
-            nucl->create_aligned_bytes(plane->data(), plane->size(), new_plane.put());
-            plane.swap(new_plane);
-        }
-        return plane.get();
+        auto plane_mut = plane.usurp_or_clone();
+        plane = plane_mut;
+        return plane_mut.get();
     }
 
-    void set_plane(unsigned idx, IAlignedBytes* in, uintptr_t stride) noexcept final {
+    void set_plane(unsigned idx, const IAlignedBytes* in, uintptr_t stride) noexcept final {
         check_idx(idx);
         planes[idx] = in;
         strides[idx] = stride;
@@ -122,46 +121,44 @@ class Frame final : public Object, public IFrame {
     }
 
     ITable* get_frame_props_mut() noexcept final {
-        if (props->is_locked()) {
-            cat_ptr<IObject> new_props;
-            props->clone(new_props.put());
-            props = new_props.query<ITable>();
-        }
-        return props.get();
+        auto props_mut = props.usurp_or_clone();
+        props = props_mut;
+        return props_mut.get();
     }
 
-    void set_frame_props(ITable* new_props) noexcept final {
+    void set_frame_props(const ITable* new_props) noexcept final {
         props = new_props;
     }
 
-    Frame(INucleus* nucl, FrameInfo fi, const IAlignedBytes** in_planes, const uintptr_t* in_strides,
+    Frame(Nucleus& nucl, FrameInfo fi, const IAlignedBytes** in_planes, const uintptr_t* in_strides,
           const ITable* in_props) noexcept
-        : nucl(nucl), fi(fi) {
-        auto count = this->get_plane_count();
+        : Shuttle(nucl), fi(fi) {
+        auto count = num_planes(fi.format);
         for (unsigned idx = 0; idx < count; ++idx) {
             if (in_planes && in_planes[idx]) {
-                auto in_plane = in_planes[idx];
-                in_plane->lock();
-                planes[idx] = const_cast<IAlignedBytes*>(in_plane);
+                planes[idx] = in_planes[idx];
                 strides[idx] = in_strides[idx];
             } else {
-                auto align = static_cast<uintptr_t>(IAlignedBytes::alignment);
-                auto stride = (fi.width_bytes() + align - 1u) / align * align;
+                auto stride = default_stride(fi, idx);
                 size_t len = stride * fi.height;
-                nucl->create_aligned_bytes(nullptr, len, planes[idx].put());
+                nucl.create_aligned_bytes(nullptr, len, planes[idx].put());
                 strides[idx] = stride;
             }
         }
-        if (in_props) {
-            in_props->lock();
-            props = const_cast<ITable*>(in_props);
-        } else {
-            nucl->create_table(props->size(), props.put());
-        }
+        if (in_props)
+            props = in_props;
+        else
+            nucl.create_table(0, props.put());
+    }
+
+    void clone(IObject** out) const noexcept final {
+        *out = new Frame(this->nucl, fi, (const IAlignedBytes**)planes.data(), strides.data(), props.get());
+        (*out)->add_ref();
     }
 };
 
 void Nucleus::create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
                            IFrame** out) noexcept {
-    *out = new Frame(this, fi, planes, strides, props);
+    *out = new Frame(*this, fi, planes, strides, props);
+    (*out)->add_ref();
 }

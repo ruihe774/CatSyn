@@ -26,13 +26,19 @@ class AllocStat {
     size_t get_current() const noexcept;
 };
 
-class Nucleus final : public Object, public INucleus {
+class Nucleus final : public Object, public INucleus, public IFactory {
+  public:
     AllocStat alloc_stat;
 
-  public:
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
     void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;
 
     void create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
                       IFrame** out) noexcept final;
+};
+
+class Shuttle {
+  protected:
+    Nucleus& nucl;
+    explicit Shuttle(Nucleus& nucl): nucl(nucl) {}
 };

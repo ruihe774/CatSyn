@@ -11,6 +11,8 @@ namespace catsyn {
 template<typename T> class cat_ptr {
     T* m_ptr;
 
+    typedef std::remove_const_t<T> mutable_element_type;
+
   public:
     typedef T element_type;
     typedef T* pointer;
@@ -19,8 +21,8 @@ template<typename T> class cat_ptr {
 
     cat_ptr(std::nullptr_t) noexcept : cat_ptr() {}
 
-    cat_ptr(pointer ptr) noexcept : m_ptr(ptr) {
-        if (m_ptr)
+    cat_ptr(pointer ptr, bool add_ref = true) noexcept : m_ptr(ptr) {
+        if (m_ptr && add_ref)
             m_ptr->add_ref();
     }
 
@@ -111,13 +113,9 @@ template<typename T> class cat_ptr {
         return temp;
     }
 
-    pointer* put() noexcept {
+    mutable_element_type** put() noexcept {
         reset();
-        return &m_ptr;
-    }
-
-    pointer* operator&() noexcept {
-        return put();
+        return const_cast<mutable_element_type**>(&m_ptr);
     }
 
     pointer* addressof() noexcept {
@@ -152,23 +150,70 @@ template<typename T> class cat_ptr {
     template<typename U> cat_ptr<U> try_query() const noexcept {
         return dynamic_cast<U*>(m_ptr);
     }
+
+    cat_ptr<mutable_element_type> try_usurp() const noexcept {
+        if (m_ptr->is_unique())
+            return const_cast<mutable_element_type*>(m_ptr);
+        else
+            return nullptr;
+    }
+
+    cat_ptr<mutable_element_type> clone() const noexcept {
+        IObject* out;
+        m_ptr->clone(&out);
+        return {dynamic_cast<mutable_element_type*>(out), false};
+    }
+
+    cat_ptr<mutable_element_type> usurp_or_clone() const noexcept {
+        if (auto p = try_usurp(); p)
+            return p;
+        else
+            return clone();
+    }
 };
 
-template<typename T> cat_ptr<T> make_cat_ptr(T* p) {
+template<typename T> cat_ptr<T> make_cat_ptr(T* p) noexcept {
     return p;
 }
 
-cat_ptr<IFrame> clone_frame(INucleus* nucl, IFrame* src, unsigned int copy_mask) noexcept {
-    auto plane_count = src->get_plane_count();
-    std::array<const IAlignedBytes*, 32> planes;
-    std::array<uintptr_t, 32> strides;
-    for (unsigned idx = 0; idx < plane_count; ++idx, copy_mask >>= 1) {
+inline unsigned bytes_per_sample(FrameFormat ff) noexcept {
+    return (ff.detail.bits_per_sample + 7u) / 8u;
+}
+
+inline unsigned num_planes(FrameFormat ff) noexcept {
+    return ff.detail.color_family == ColorFamily::Gray ? 1 : 3;
+}
+
+inline unsigned plane_width(FrameInfo fi, unsigned idx) noexcept {
+    return fi.width >> (idx ? fi.format.detail.width_subsampling : 0u);
+}
+
+inline unsigned plane_height(FrameInfo fi, unsigned idx) noexcept {
+    return fi.height >> (idx ? fi.format.detail.height_subsampling : 0u);
+}
+
+inline uintptr_t width_bytes(FrameInfo fi, unsigned idx) noexcept {
+    return static_cast<uintptr_t>(plane_width(fi, idx)) * bytes_per_sample(fi.format);
+}
+
+inline uintptr_t default_stride(FrameInfo fi, unsigned idx) noexcept {
+    auto align = static_cast<uintptr_t>(IAlignedBytes::alignment);
+    auto stride = (width_bytes(fi, idx) + align - 1u) / align * align;
+    return stride;
+}
+
+cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned int copy_mask) noexcept {
+    auto fi = src->get_frame_info();
+    auto count = num_planes(fi.format);
+    const IAlignedBytes* planes[32];
+    uintptr_t strides[32];
+    for (unsigned idx = 0; idx < count; ++idx, copy_mask >>= 1) {
         planes[idx] = copy_mask & 1 ? src->get_plane(idx) : nullptr;
         strides[idx] = copy_mask & 1 ? src->get_stride(idx) : 0;
     }
-    cat_ptr<IFrame> out;
-    nucl->create_frame(src->get_frame_info(), planes.data(), strides.data(), src->get_frame_props(), out.put());
-    return out;
+    IFrame* out;
+    factory->create_frame(fi, planes, strides, src->get_frame_props(), &out);
+    return {out, false};
 }
 
 } // namespace catsyn
