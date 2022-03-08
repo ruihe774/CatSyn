@@ -7,8 +7,6 @@
 
 #include <catimpl.h>
 
-using namespace catsyn;
-
 class Bytes final : public Object, public IBytes, public Shuttle {
   public:
     Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {

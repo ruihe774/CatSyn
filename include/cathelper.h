@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <memory>
 #include <type_traits>
+#include <stdexcept>
 
 #include <catsyn.h>
 
@@ -202,7 +203,7 @@ inline size_t default_stride(FrameInfo fi, unsigned idx) noexcept {
     return stride;
 }
 
-cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned int copy_mask) noexcept {
+inline cat_ptr<IFrame> mask_clone_frame(IFactory* factory, IFrame* src, unsigned int copy_mask) noexcept {
     auto fi = src->get_frame_info();
     auto count = num_planes(fi.format);
     const IAlignedBytes* planes[32];

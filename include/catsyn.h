@@ -33,7 +33,7 @@ class IObject {
         return refcount.load(std::memory_order_acq_rel) == 1;
     }
 
-    virtual void clone(IObject** out) const = 0;
+    virtual void clone(IObject** out) const noexcept = 0;
 
     virtual ~IObject() = default;
 

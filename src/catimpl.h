@@ -35,6 +35,9 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                       IFrame** out) noexcept final;
+    void create_table(size_t reserve_capacity, ITable** out) noexcept final;
+
+    void clone(IObject** out) const noexcept final;
 };
 
 class Shuttle {
