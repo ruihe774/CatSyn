@@ -4,8 +4,8 @@
 
 #define CAT_IMPL
 
-#include <catsyn.h>
 #include <cathelper.h>
+#include <catsyn.h>
 
 using namespace catsyn;
 
@@ -32,4 +32,7 @@ class Nucleus final : public Object, public INucleus {
   public:
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
     void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;
+
+    void create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
+                      IFrame** out) noexcept final;
 };

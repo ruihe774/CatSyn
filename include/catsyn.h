@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <new>
 #include <utility>
@@ -36,19 +37,26 @@ class IObject {
 };
 
 class IClone : virtual public IObject {
-    virtual void clone(IClone** out) const = 0;
+  public:
+    virtual void clone(IObject** out) const = 0;
 };
 
-class ITable : virtual public IClone {
+class ILockable : virtual public IObject {
+  public:
+    virtual void lock() const noexcept = 0;
+    virtual bool is_locked() const noexcept = 0;
+};
+
+class ITable : virtual public IClone, virtual public ILockable {
   public:
     static constexpr size_t npos = static_cast<size_t>(-1);
 
     virtual const IObject* get(size_t idx) const = 0;
-    virtual IClone* get_mut(size_t idx) = 0;
+    virtual IObject* get_mut(size_t idx) = 0;
 
     virtual void set(size_t idx, IObject* obj, bool insert) = 0;
 
-    virtual void pop(size_t idx, IObject** out) = 0;
+    virtual void del(size_t idx) = 0;
 
     virtual size_t get_idx(const char* key) const noexcept = 0;
     virtual const char* get_key(size_t idx) const noexcept = 0;
@@ -58,14 +66,19 @@ class ITable : virtual public IClone {
     virtual size_t size() const noexcept = 0;
 };
 
-class IBytes : virtual public IObject {
+class IBytes : virtual public ILockable {
+    mutable std::atomic_bool locked{false};
+
   protected:
     void* buf{nullptr};
     size_t len{0};
 
   public:
-    void* data() noexcept {
-        return buf;
+    void* data_mut() noexcept {
+        if (is_locked())
+            return nullptr;
+        else
+            return buf;
     }
 
     const void* data() const noexcept {
@@ -74,6 +87,14 @@ class IBytes : virtual public IObject {
 
     size_t size() const noexcept {
         return len;
+    }
+
+    void lock() const noexcept final {
+        locked.store(true, std::memory_order_acq_rel);
+    }
+
+    bool is_locked() const noexcept final {
+        return locked.load(std::memory_order_acquire);
     }
 };
 
@@ -98,10 +119,20 @@ class INumberArray : virtual public IClone {
     virtual void set_array(double* in, size_t len, bool extend) = 0;
 };
 
+struct FrameInfo;
+class IFrame;
+
 class INucleus : virtual public IObject {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
     virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
+
+    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const uintptr_t* strides, const ITable* props,
+                              IFrame** out) noexcept = 0;
+
+    virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
+    virtual void create_integer_array(size_t reserve_capacity, IIntegerArray** out) noexcept = 0;
+    virtual void create_number_array(size_t reserve_capacity, INumberArray** out) noexcept = 0;
 };
 
 enum class SampleType {
@@ -119,17 +150,25 @@ union FrameFormat {
     uint32_t id;
     struct {
         unsigned height_subsampling : 8;
-        unsigned width_subsampling: 8;
-        unsigned bits_per_sample: 8;
-        SampleType sample_type: 4;
-        ColorFamily color_family: 4;
+        unsigned width_subsampling : 8;
+        unsigned bits_per_sample : 8;
+        SampleType sample_type : 4;
+        ColorFamily color_family : 4;
     } detail;
+
+    unsigned bytes_per_sample() const noexcept {
+        return (detail.bits_per_sample + 7u) / 8u;
+    }
 };
 
 struct FrameInfo {
     FrameFormat format;
     unsigned width;
     unsigned height;
+
+    uintptr_t width_bytes() const noexcept {
+        return static_cast<uintptr_t>(width) * format.bytes_per_sample();
+    }
 };
 
 struct FpsFraction {
@@ -144,8 +183,11 @@ struct VideoInfo {
 };
 
 class IFrame : virtual public IObject {
+  public:
     virtual const IAlignedBytes* get_plane(unsigned idx) const noexcept = 0;
     virtual IAlignedBytes* get_plane_mut(unsigned idx) noexcept = 0;
+
+    virtual void set_plane(unsigned idx, IAlignedBytes* in, uintptr_t stride) noexcept = 0;
 
     virtual FrameInfo get_frame_info() const noexcept = 0;
 

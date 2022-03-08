@@ -158,4 +158,17 @@ template<typename T> cat_ptr<T> make_cat_ptr(T* p) {
     return p;
 }
 
+cat_ptr<IFrame> clone_frame(INucleus* nucl, IFrame* src, unsigned int copy_mask) noexcept {
+    auto plane_count = src->get_plane_count();
+    std::array<const IAlignedBytes*, 32> planes;
+    std::array<uintptr_t, 32> strides;
+    for (unsigned idx = 0; idx < plane_count; ++idx, copy_mask >>= 1) {
+        planes[idx] = copy_mask & 1 ? src->get_plane(idx) : nullptr;
+        strides[idx] = copy_mask & 1 ? src->get_stride(idx) : 0;
+    }
+    cat_ptr<IFrame> out;
+    nucl->create_frame(src->get_frame_info(), planes.data(), strides.data(), src->get_frame_props(), out.put());
+    return out;
+}
+
 } // namespace catsyn

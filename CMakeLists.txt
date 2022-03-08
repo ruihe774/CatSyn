@@ -9,8 +9,8 @@ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 add_library(catsyn SHARED
     include/cathelper.h
     include/catsyn.h
-    src/bytes.cpp
     src/catimpl.h
+    src/frame.cpp
 )
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
