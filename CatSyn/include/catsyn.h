@@ -5,10 +5,18 @@
 #include <new>
 #include <utility>
 
+#ifdef _WIN32
 #ifdef CAT_IMPL
 #define CAT_API __declspec(dllexport)
 #else
 #define CAT_API __declspec(dllimport)
+#endif
+#else
+#ifdef CAT_IMPL
+#define CAT_API __attribute__ ((visibility ("default")))
+#else
+#define CAT_API
+#endif
 #endif
 
 namespace catsyn {

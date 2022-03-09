@@ -1,9 +1,12 @@
 #include <stdio.h>
 
-#include <Windows.h>
-#include <io.h>
 
 #include <catimpl.h>
+
+#ifdef _WIN32
+
+#include <Windows.h>
+#include <io.h>
 
 static bool check_support_ascii_escape() noexcept {
     DWORD mode;
@@ -11,6 +14,16 @@ static bool check_support_ascii_escape() noexcept {
         return false;
     return mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
+
+#else
+
+#include <unistd.h>
+
+static bool check_support_ascii_escape() noexcept {
+    return isatty(fileno(stderr));
+}
+
+#endif
 
 Logger::Logger() : enable_ascii_escape(check_support_ascii_escape()) {}
 

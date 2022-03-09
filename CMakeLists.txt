@@ -53,7 +53,7 @@ elseif(GNULIKE)
 endif()
 
 if(GNULIKE)
-    set(COMPILE_FLAGS "${COMPILE_FLAGS} -Wall")
+    set(COMPILE_FLAGS "${COMPILE_FLAGS} -fvisibility=hidden -Wall")
 endif()
 if(MSVC)
     set(COMPILE_FLAGS "${COMPILE_FLAGS} /permissive- /utf-8 /W2 /GS-")
