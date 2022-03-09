@@ -81,6 +81,8 @@ set(MI_SKIP_COLLECT_ON_EXIT ON CACHE BOOL "Skip collecting memory on program exi
 set(MI_USE_CXX ON CACHE BOOL "Use the C++ compiler to compile the library (instead of the C compiler)" FORCE)
 add_subdirectory(mimalloc EXCLUDE_FROM_ALL)
 
+add_subdirectory(boost EXCLUDE_FROM_ALL)
+
 add_subdirectory(CatSyn)
 
 if(CAT_BUILD_TESTS)

@@ -2,6 +2,10 @@
 
 #include <atomic>
 
+#include <boost/lockfree/queue.hpp>
+#include <boost/sync/semaphore.hpp>
+#include <boost/thread/thread.hpp>
+
 #define CAT_IMPL
 
 #include <cathelper.h>
@@ -27,12 +31,15 @@ class AllocStat {
 };
 
 class Logger final : public Object, public ILogger {
-    bool enable_ascii_escape;
+    mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
+    mutable boost::sync::semaphore semaphore;
+    boost::thread thread;
 
   public:
     Logger();
     void log(LogLevel level, const char* msg) const noexcept final;
     void clone(IObject** out) const noexcept final;
+    ~Logger() final;
 };
 
 class Nucleus final : public Object, public INucleus, public IFactory {
