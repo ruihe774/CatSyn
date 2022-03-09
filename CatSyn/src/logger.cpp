@@ -20,6 +20,12 @@ static void write_err(const char* s, size_t n) noexcept {
     WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr);
 }
 
+static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost) noexcept {
+    HANDLE hThread = thread.native_handle();
+    SetThreadPriority(hThread, priority);
+    SetThreadPriorityBoost(hThread, !allow_boost);
+}
+
 #else
 
 #include <unistd.h>
@@ -30,7 +36,7 @@ static bool check_support_ascii_escape() noexcept {
 
 #endif
 
-static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) {
+static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) noexcept {
     const char *prompt, *color, *clear;
     switch (level) {
     case LogLevel::DEBUG:
@@ -78,7 +84,9 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
     }
 }
 
-Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore)) {}
+Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore)) {
+    set_thread_priority(thread, -1, false);
+}
 
 Logger::~Logger() {
     thread.interrupt();
