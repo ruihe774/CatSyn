@@ -51,6 +51,6 @@ class NotImplemted : public std::logic_error {
     NotImplemted() : std::logic_error("not implemented") {}
 };
 
-[[noreturn]] static void not_implemented() {
+[[noreturn]] inline void not_implemented() {
     throw NotImplemted();
 }
