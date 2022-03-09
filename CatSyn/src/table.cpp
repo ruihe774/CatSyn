@@ -1,7 +1,7 @@
-#include <vector>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <catimpl.h>
 
@@ -47,7 +47,7 @@ class Table final : public Object, public ITable {
     }
 
     size_t get_ref(const char* key) const noexcept final {
-        std::string_view keysv {key};
+        std::string_view keysv{key};
         for (size_t i = 0; i < size(); ++i)
             if (const auto& item_key = vec[i].first; item_key && item_key.value() == keysv)
                 return i;

@@ -26,9 +26,22 @@ class AllocStat {
     size_t get_current() const noexcept;
 };
 
+class Logger final : public Object, public ILogger {
+    bool enable_ascii_escape;
+
+  public:
+    Logger();
+    void log(LogLevel level, const char* msg) const noexcept final;
+    void clone(IObject** out) const noexcept final;
+};
+
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
     AllocStat alloc_stat;
+    const Logger logger;
+
+    IFactory* get_factory() noexcept;
+    const ILogger* get_logger() const noexcept;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
     void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;
@@ -43,7 +56,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 class Shuttle {
   protected:
     Nucleus& nucl;
-    explicit Shuttle(Nucleus& nucl): nucl(nucl) {}
+    explicit Shuttle(Nucleus& nucl) : nucl(nucl) {}
 };
 
 class NotImplemted : public std::logic_error {

@@ -83,8 +83,14 @@ class IAlignedBytes : virtual public IBytes {
 
 struct FrameInfo;
 class IFrame;
+class IFactory;
+class ILogger;
 
-class INucleus : virtual public IObject {};
+class INucleus : virtual public IObject {
+  public:
+    virtual IFactory* get_factory() noexcept = 0;
+    virtual const ILogger* get_logger() const noexcept = 0;
+};
 
 class IFactory : virtual public IObject {
   public:
@@ -147,6 +153,13 @@ class IFrame : virtual public IObject {
     virtual const ITable* get_frame_props() const noexcept = 0;
     virtual ITable* get_frame_props_mut() noexcept = 0;
     virtual void set_frame_props(const ITable* props) noexcept = 0;
+};
+
+enum class LogLevel { DEBUG = 10, INFO = 20, WARNING = 30 };
+
+class ILogger : virtual public IObject {
+  public:
+    virtual void log(LogLevel level, const char* msg) const noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

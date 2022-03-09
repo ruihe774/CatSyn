@@ -15,6 +15,7 @@ add_library(catsyn SHARED
     include/catsyn.h
     src/catimpl.h
     src/frame.cpp
+    src/logger.cpp
     src/new-delete-override.cpp
     src/nucleus.cpp
     src/table.cpp)

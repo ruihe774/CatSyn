@@ -82,3 +82,7 @@ set(MI_USE_CXX ON CACHE BOOL "Use the C++ compiler to compile the library (inste
 add_subdirectory(mimalloc EXCLUDE_FROM_ALL)
 
 add_subdirectory(CatSyn)
+
+if(CAT_BUILD_TESTS)
+    add_subdirectory(tests EXCLUDE_FROM_ALL)
+endif()
