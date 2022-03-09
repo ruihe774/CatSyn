@@ -5,12 +5,14 @@
 
 #include <string.h>
 
+#include <mimalloc.h>
+
 #include <catimpl.h>
 
 class Bytes final : public Object, public IBytes, public Shuttle {
   public:
     Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = operator new(len);
+        this->buf = mi_new(len);
         this->len = len;
         this->nucl.alloc_stat.alloc(len);
         if (data)
@@ -18,7 +20,7 @@ class Bytes final : public Object, public IBytes, public Shuttle {
     }
 
     ~Bytes() final {
-        operator delete(this->buf);
+        mi_free(this->buf);
         this->nucl.alloc_stat.free(len);
     }
 
@@ -26,12 +28,17 @@ class Bytes final : public Object, public IBytes, public Shuttle {
         *out = new Bytes(this->nucl, this->buf, this->len);
         (*out)->add_ref();
     }
+
+    void realloc(size_t new_size) noexcept final {
+        this->buf = mi_new_realloc(this->buf, new_size);
+        this->len = new_size;
+    }
 };
 
 class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
   public:
     AlignedBytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = operator new(len, alignment);
+        this->buf = mi_new_aligned(len, static_cast<size_t>(alignment));
         this->len = len;
         this->nucl.alloc_stat.alloc(len);
         if (data)
@@ -39,13 +46,17 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
     }
 
     ~AlignedBytes() final {
-        operator delete(this->buf, alignment);
+        mi_free_aligned(this->buf, static_cast<size_t>(alignment));
         this->nucl.alloc_stat.free(len);
     }
 
     void clone(IObject** out) const noexcept final {
         *out = new AlignedBytes(this->nucl, this->buf, this->len);
         (*out)->add_ref();
+    }
+
+    void realloc(size_t new_size) noexcept final {
+        not_implemented();
     }
 };
 

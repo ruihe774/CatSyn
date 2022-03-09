@@ -45,3 +45,12 @@ class Shuttle {
     Nucleus& nucl;
     explicit Shuttle(Nucleus& nucl): nucl(nucl) {}
 };
+
+class NotImplemted : public std::logic_error {
+  public:
+    NotImplemted() : std::logic_error("not implemented") {}
+};
+
+[[noreturn]] static void not_implemented() {
+    throw NotImplemted();
+}

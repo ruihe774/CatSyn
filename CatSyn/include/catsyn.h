@@ -72,6 +72,8 @@ class IBytes : virtual public IObject {
     size_t size() const noexcept {
         return len;
     }
+
+    virtual void realloc(size_t new_size) noexcept = 0;
 };
 
 class IAlignedBytes : virtual public IBytes {
