@@ -1,17 +1,23 @@
-cmake_minimum_required(VERSION 3.21)
-project(CatSyn)
+cmake_minimum_required(VERSION 3.20)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive- /utf-8 /W3 /wd4250 /D_UNICODE /DUNICODE /GS-")
+project(CatSyn
+    LANGUAGES CXX
+    VERSION 1.0.0
+    DESCRIPTION "Catalyzed video processing framework"
+)
 
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4250")
+endif()
 
 add_library(catsyn SHARED
     include/cathelper.h
     include/catsyn.h
     src/catimpl.h
     src/frame.cpp
-    src/table.cpp
-    src/nucleus.cpp)
+    src/new-delete-override.cpp
+    src/nucleus.cpp
+    src/table.cpp)
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
+target_link_libraries(catsyn PRIVATE mimalloc-static)
