@@ -89,6 +89,16 @@ class IAlignedBytes : virtual public IBytes {
     static constexpr std::align_val_t alignment = static_cast<std::align_val_t>(64);
 };
 
+enum class SampleType {
+    Integer,
+    Float,
+};
+
+class INumberArray : virtual public IBytes {
+  public:
+    SampleType sample_type;
+};
+
 struct FrameInfo;
 class IFrame;
 class IFactory;
@@ -104,14 +114,10 @@ class IFactory : virtual public IObject {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
     virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
+    virtual void create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept = 0;
     virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
-};
-
-enum class SampleType {
-    Integer,
-    Float,
 };
 
 enum class ColorFamily {

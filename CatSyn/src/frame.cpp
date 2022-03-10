@@ -9,7 +9,7 @@
 
 #include <catimpl.h>
 
-class Bytes final : public Object, public IBytes, public Shuttle {
+class Bytes : public Object, virtual public IBytes, public Shuttle {
   public:
     Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
         this->buf = mi_new(len);
@@ -19,7 +19,7 @@ class Bytes final : public Object, public IBytes, public Shuttle {
             memcpy(this->buf, data, len);
     }
 
-    ~Bytes() final {
+    ~Bytes() override {
         mi_free(this->buf);
         this->nucl.alloc_stat.free(len);
     }
@@ -60,6 +60,13 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
     }
 };
 
+class NumberArray final : public Bytes, public INumberArray {
+  public:
+    NumberArray(Nucleus& nucl, SampleType sample_type, const void* data, size_t len): Bytes(nucl, data, len) {
+        this->sample_type = sample_type;
+    }
+};
+
 void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept {
     *out = new Bytes(*this, data, len);
     (*out)->add_ref();
@@ -67,6 +74,11 @@ void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept 
 
 void Nucleus::create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept {
     *out = new AlignedBytes(*this, data, len);
+    (*out)->add_ref();
+}
+
+void Nucleus::create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept {
+    *out = new NumberArray(*this, sample_type, data, len);
     (*out)->add_ref();
 }
 
