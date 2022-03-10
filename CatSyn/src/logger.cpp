@@ -1,5 +1,6 @@
 #include <algorithm>
 
+#include <stdio.h>
 #include <string.h>
 
 #include <catimpl.h>
@@ -11,13 +12,13 @@
 
 static bool check_support_ascii_escape() noexcept {
     DWORD mode;
-    if (!GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &mode))
+    if (!GetConsoleMode(reinterpret_cast<HANDLE>(_get_osfhandle(2)), &mode))
         return false;
     return mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
 
 void write_err(const char* s, size_t n) noexcept {
-    WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr);
+    _fwrite_nolock(s, n, 1, stderr);
 }
 
 static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
@@ -35,7 +36,7 @@ static bool check_support_ascii_escape() noexcept {
 }
 
 void write_err(const char* s, size_t n) noexcept {
-    write(2, s, n);
+    fwrite_unlocked(s, n, 1, stderr);
 }
 
 static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
