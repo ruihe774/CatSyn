@@ -16,6 +16,10 @@ ILogger* Nucleus::get_logger() noexcept {
     return &logger;
 }
 
+void Nucleus::calling_thread_init() noexcept {
+    thread_init();
+}
+
 CAT_API void catsyn::create_nucleus(INucleus** out) {
     thread_init();
     mi_option_set_enabled_default(mi_option_large_os_pages, true);

@@ -75,6 +75,8 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     AllocStat alloc_stat;
     Logger logger;
 
+    void calling_thread_init() noexcept final;
+
     IFactory* get_factory() noexcept final;
     ILogger* get_logger() noexcept final;
 

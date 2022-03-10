@@ -106,6 +106,8 @@ class ILogger;
 
 class INucleus : virtual public IObject {
   public:
+    virtual void calling_thread_init() noexcept = 0;
+
     virtual IFactory* get_factory() noexcept = 0;
     virtual ILogger* get_logger() noexcept = 0;
 };
