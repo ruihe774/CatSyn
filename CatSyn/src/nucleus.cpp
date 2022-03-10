@@ -13,9 +13,9 @@ Nucleus::Nucleus() : enzyme_finders(nullptr), enzyme_adapters(nullptr) {
     create_table(1, adapters.put());
     enzyme_adapters = TableView<ITable>(std::move(adapters));
 
-    cat_ptr<IEnzymeAdapter> csv1;
-    create_catsyn_v1_enzyme_adapter(csv1.put());
-    enzyme_adapters.set("catsyn::v1", csv1.get());
+//    cat_ptr<IEnzymeAdapter> csv1;
+//    create_catsyn_v1_enzyme_adapter(csv1.put());
+//    enzyme_adapters.set("catsyn::v1", csv1.get());
 }
 
 void Nucleus::clone(IObject** out) const noexcept {

@@ -197,7 +197,7 @@ class IEnzyme : virtual public IObject {};
 
 class IEnzymeFinder : virtual public IObject {
   public:
-    virtual size_t find_enzyme(const char** tokens) const noexcept = 0;
+    virtual size_t find_enzyme(const char* const** out) const noexcept = 0;
 };
 
 class IEnzymeAdapter : virtual public IObject {

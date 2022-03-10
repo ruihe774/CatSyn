@@ -106,7 +106,7 @@ Logger::~Logger() {
     thread.join();
 }
 
-static void log_failed() {
+[[noreturn]] static void log_failed() {
     throw std::runtime_error("log failed");
 }
 

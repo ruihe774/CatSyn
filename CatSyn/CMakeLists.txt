@@ -24,6 +24,7 @@ add_library(catsyn SHARED
     include/cathelper.h
     include/catsyn.h
     src/catimpl.h
+    src/enzyme.cpp
     src/frame.cpp
     src/logger.cpp
     src/new-delete-override.cpp
@@ -34,6 +35,7 @@ target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_link_libraries(catsyn PRIVATE mimalloc-static)
 target_link_libraries(catsyn PRIVATE
+    Boost::algorithm
     Boost::thread
     Boost::sync
     Boost::lockfree
