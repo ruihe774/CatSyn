@@ -97,7 +97,7 @@ class ILogger;
 class INucleus : virtual public IObject {
   public:
     virtual IFactory* get_factory() noexcept = 0;
-    virtual const ILogger* get_logger() const noexcept = 0;
+    virtual ILogger* get_logger() noexcept = 0;
 };
 
 class IFactory : virtual public IObject {
@@ -168,6 +168,7 @@ enum class LogLevel { DEBUG = 10, INFO = 20, WARNING = 30 };
 class ILogger : virtual public IObject {
   public:
     virtual void log(LogLevel level, const char* msg) const noexcept = 0;
+    virtual void set_level(LogLevel level) noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

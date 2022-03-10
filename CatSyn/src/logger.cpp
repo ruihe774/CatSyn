@@ -20,7 +20,7 @@ static void write_err(const char* s, size_t n) noexcept {
     WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr);
 }
 
-static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost) noexcept {
+static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
     HANDLE hThread = thread.native_handle();
     SetThreadPriority(hThread, priority);
     SetThreadPriorityBoost(hThread, !allow_boost);
@@ -84,7 +84,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
     }
 }
 
-Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore)) {
+Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore)), filter_level(LogLevel::DEBUG) {
     set_thread_priority(thread, -1, false);
 }
 
@@ -99,12 +99,18 @@ static void log_failed() {
 }
 
 void Logger::log(LogLevel level, const char* msg) const noexcept {
+    if (level < filter_level)
+        return;
     auto msg_len = strlen(msg);
     auto copied = static_cast<char*>(operator new(msg_len + 1));
     memcpy(copied, msg, msg_len + 1);
     if (!queue.push(reinterpret_cast<uintptr_t>(copied) | static_cast<uintptr_t>(level) / 10))
         log_failed();
     semaphore.post();
+}
+
+void Logger::set_level(LogLevel level) noexcept {
+    filter_level = level;
 }
 
 void Logger::clone(IObject** out) const noexcept {

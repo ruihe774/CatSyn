@@ -34,10 +34,12 @@ class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
     mutable boost::sync::semaphore semaphore;
     boost::thread thread;
+    LogLevel filter_level;
 
   public:
     Logger();
     void log(LogLevel level, const char* msg) const noexcept final;
+    void set_level(LogLevel level) noexcept final;
     void clone(IObject** out) const noexcept final;
     ~Logger() final;
 };
@@ -45,10 +47,10 @@ class Logger final : public Object, public ILogger {
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
     AllocStat alloc_stat;
-    const Logger logger;
+    Logger logger;
 
-    IFactory* get_factory() noexcept;
-    const ILogger* get_logger() const noexcept;
+    IFactory* get_factory() noexcept final;
+    ILogger* get_logger() noexcept final;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
     void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;

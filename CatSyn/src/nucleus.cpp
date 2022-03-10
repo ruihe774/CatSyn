@@ -10,7 +10,7 @@ IFactory* Nucleus::get_factory() noexcept {
     return this;
 }
 
-const ILogger* Nucleus::get_logger() const noexcept {
+ILogger* Nucleus::get_logger() noexcept {
     return &logger;
 }
 
