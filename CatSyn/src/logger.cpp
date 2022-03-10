@@ -16,7 +16,7 @@ static bool check_support_ascii_escape() noexcept {
     return mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
 
-static void write_err(const char* s, size_t n) noexcept {
+void write_err(const char* s, size_t n) noexcept {
     WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr);
 }
 
@@ -87,7 +87,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
     }
 }
 
-Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()), filter_level(LogLevel::DEBUG) {
+Logger::Logger() : filter_level(LogLevel::DEBUG), thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()) {
     set_thread_priority(thread, -1, false);
 }
 

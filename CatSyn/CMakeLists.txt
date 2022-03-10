@@ -14,6 +14,12 @@ add_library(boost_sync INTERFACE)
 add_library(Boost::sync ALIAS boost_sync)
 target_include_directories(boost_sync INTERFACE ../boost/libs/sync/include)
 
+if(WIN32)
+    add_library(Boost::stacktrace ALIAS boost_stacktrace_windbg)
+else()
+    add_library(Boost::stacktrace ALIAS boost_stacktrace_backtrace)
+endif()
+
 add_library(catsyn SHARED
     include/cathelper.h
     include/catsyn.h
@@ -26,4 +32,9 @@ add_library(catsyn SHARED
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_link_libraries(catsyn PRIVATE mimalloc-static)
-target_link_libraries(catsyn PRIVATE Boost::thread Boost::sync Boost::lockfree)
+target_link_libraries(catsyn PRIVATE
+    Boost::thread
+    Boost::sync
+    Boost::lockfree
+    Boost::stacktrace)
+target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)

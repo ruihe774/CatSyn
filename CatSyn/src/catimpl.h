@@ -78,3 +78,5 @@ class NotImplemted : public std::logic_error {
 [[noreturn]] inline void not_implemented() {
     throw NotImplemted();
 }
+
+void write_err(const char* s, size_t n) noexcept;
