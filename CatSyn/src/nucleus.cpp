@@ -24,7 +24,9 @@ void print_stacktrace() {
     st += "Aborted\n";
 #endif
     write_err(st.data(), st.size());
-    abort();
+
+    std::set_terminate(nullptr);
+    std::terminate();
 }
 
 CAT_API void catsyn::create_nucleus(INucleus** out) {
