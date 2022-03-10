@@ -103,6 +103,8 @@ struct FrameInfo;
 class IFrame;
 class IFactory;
 class ILogger;
+class IEnzymeFinder;
+class IEnzymeAdapter;
 
 class INucleus : virtual public IObject {
   public:
@@ -110,6 +112,9 @@ class INucleus : virtual public IObject {
 
     virtual IFactory* get_factory() noexcept = 0;
     virtual ILogger* get_logger() noexcept = 0;
+
+    virtual ITable* get_enzyme_finders() noexcept = 0;
+    virtual ITable* get_enzyme_adapters() noexcept = 0;
 };
 
 class IFactory : virtual public IObject {
@@ -120,6 +125,9 @@ class IFactory : virtual public IObject {
     virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
+
+    virtual void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept = 0;
+    virtual void create_catsyn_v1_enzyme_adapter(IEnzymeAdapter** out) noexcept = 0;
 };
 
 enum class ColorFamily {
@@ -183,6 +191,18 @@ class ILogger : virtual public IObject {
     virtual void log(LogLevel level, const char* msg) const noexcept = 0;
     virtual void set_level(LogLevel level) noexcept = 0;
     virtual void set_sink(ILogSink* in) noexcept = 0;
+};
+
+class IEnzyme : virtual public IObject {};
+
+class IEnzymeFinder : virtual public IObject {
+  public:
+    virtual size_t find_enzyme(const char** tokens) const noexcept = 0;
+};
+
+class IEnzymeAdapter : virtual public IObject {
+  public:
+    virtual void load_enzyme(const char* token, IObject** out) const noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
