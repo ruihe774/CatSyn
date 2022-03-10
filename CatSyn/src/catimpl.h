@@ -30,12 +30,36 @@ class AllocStat {
     size_t get_current() const noexcept;
 };
 
+void write_err(const char* s, size_t n) noexcept;
+
+void thread_init() noexcept;
+
+class Thread final : public boost::thread {
+    template<typename F, typename... Args> static void proxy(F f, Args... args) {
+        thread_init();
+        f(std::forward<Args>(args)...);
+    }
+
+    template<typename T, bool c> struct unbox_reference_if {};
+    template<typename T> struct unbox_reference_if<T, true> {
+        typedef typename boost::unwrap_reference<T>::type& type;
+    };
+    template<typename T> struct unbox_reference_if<T, false> { typedef T type; };
+    template<typename T>
+    using unbox_reference_t = typename unbox_reference_if<T, boost::is_reference_wrapper<T>::value>::type;
+
+  public:
+    template<typename F, typename... Args>
+    explicit Thread(F f, Args&&... args)
+        : boost::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
+};
+
 class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
     mutable boost::sync::semaphore semaphore;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
-    boost::thread thread;
+    Thread thread;
 
   public:
     Logger();
@@ -78,5 +102,3 @@ class NotImplemted : public std::logic_error {
 [[noreturn]] inline void not_implemented() {
     throw NotImplemted();
 }
-
-void write_err(const char* s, size_t n) noexcept;

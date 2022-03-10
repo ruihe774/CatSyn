@@ -28,7 +28,8 @@ add_library(catsyn SHARED
     src/logger.cpp
     src/new-delete-override.cpp
     src/nucleus.cpp
-    src/table.cpp)
+    src/table.cpp
+    src/threading.cpp)
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_link_libraries(catsyn PRIVATE mimalloc-static)
