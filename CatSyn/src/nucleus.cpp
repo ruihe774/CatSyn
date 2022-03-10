@@ -1,5 +1,7 @@
 #include <stdexcept>
 
+#include <mimalloc.h>
+
 #include <catimpl.h>
 
 void Nucleus::clone(IObject** out) const noexcept {
@@ -15,6 +17,7 @@ ILogger* Nucleus::get_logger() noexcept {
 }
 
 CAT_API void catsyn::create_nucleus(INucleus** out) {
+    mi_option_set_enabled_default(mi_option_large_os_pages, true);
     *out = new Nucleus;
     (*out)->add_ref();
 }
