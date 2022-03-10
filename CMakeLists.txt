@@ -66,6 +66,8 @@ if(WIN32)
     else()
         set(COMPILE_FLAGS "${COMPILE_FLAGS} /wd4005")
     endif()
+else()
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
 set(CMAKE_CONFIGURATION_TYPES "RelWithDebInfo;Debug")

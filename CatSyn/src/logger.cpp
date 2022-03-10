@@ -31,7 +31,15 @@ static void set_thread_priority(boost::thread& thread, int priority, bool allow_
 #include <unistd.h>
 
 static bool check_support_ascii_escape() noexcept {
-    return isatty(fileno(stderr));
+    return isatty(2);
+}
+
+void write_err(const char* s, size_t n) noexcept {
+    write(2, s, n);
+}
+
+static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
+    // TODO: implement this
 }
 
 #endif

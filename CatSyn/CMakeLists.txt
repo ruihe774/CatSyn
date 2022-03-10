@@ -38,3 +38,7 @@ target_link_libraries(catsyn PRIVATE
     Boost::lockfree
     Boost::stacktrace)
 target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)
+
+if(NOT WIN32)
+    target_link_libraries(catsyn PRIVATE dl backtrace)
+endif()
