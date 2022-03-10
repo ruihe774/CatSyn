@@ -65,12 +65,15 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
 }
 
 static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue,
-                       boost::sync::semaphore& semaphore) {
+                       boost::sync::semaphore& semaphore, ILogSink** sink) {
     bool enable_ascii_escape = check_support_ascii_escape();
     auto f = [=](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);
         auto msg = reinterpret_cast<char*>(record & ~static_cast<uintptr_t>(3));
-        log_out(level, msg, enable_ascii_escape);
+        if (auto sk = *sink; sk)
+            sk->send_log(level, msg);
+        else
+            log_out(level, msg, enable_ascii_escape);
     };
     try {
         while (true) {
@@ -84,7 +87,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
     }
 }
 
-Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore)), filter_level(LogLevel::DEBUG) {
+Logger::Logger() : thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()), filter_level(LogLevel::DEBUG) {
     set_thread_priority(thread, -1, false);
 }
 
@@ -111,6 +114,10 @@ void Logger::log(LogLevel level, const char* msg) const noexcept {
 
 void Logger::set_level(LogLevel level) noexcept {
     filter_level = level;
+}
+
+void Logger::set_sink(ILogSink* in) noexcept {
+    sink = in;
 }
 
 void Logger::clone(IObject** out) const noexcept {

@@ -33,13 +33,15 @@ class AllocStat {
 class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
     mutable boost::sync::semaphore semaphore;
-    boost::thread thread;
+    cat_ptr<ILogSink> sink;
     LogLevel filter_level;
+    boost::thread thread;
 
   public:
     Logger();
     void log(LogLevel level, const char* msg) const noexcept final;
     void set_level(LogLevel level) noexcept final;
+    void set_sink(ILogSink* in) noexcept final;
     void clone(IObject** out) const noexcept final;
     ~Logger() final;
 };

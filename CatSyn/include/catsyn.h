@@ -165,10 +165,16 @@ class IFrame : virtual public IObject {
 
 enum class LogLevel { DEBUG = 10, INFO = 20, WARNING = 30 };
 
+class ILogSink : virtual public IObject {
+  public:
+    virtual void send_log(LogLevel level, const char* msg) noexcept = 0;
+};
+
 class ILogger : virtual public IObject {
   public:
     virtual void log(LogLevel level, const char* msg) const noexcept = 0;
     virtual void set_level(LogLevel level) noexcept = 0;
+    virtual void set_sink(ILogSink* in) noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
