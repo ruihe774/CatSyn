@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <string>
+#include <map>
 
 #include <Windows.h>
 
@@ -48,7 +49,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
         (*out)->add_ref();
     }
 
-    size_t find_enzyme(const char* const** out) noexcept final {
+    size_t find(const char* const** out) noexcept final {
         if (!tokens_c_str) {
             const std::string prefix = "dll:";
             if (path.has_filename())
@@ -75,11 +76,15 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
     (*out)->add_ref();
 }
 
-class CatSynV1EnzymeAdaptor final : public Object, public IEnzymeAdapter, public Shuttle {
-    std::vector<boost::dll::shared_library> loaded;
+class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
+    std::map<IObject*, boost::dll::shared_library> loaded;
+
+    [[noreturn]] static void hydrolyze_non_unique() {
+        throw std::runtime_error("attempt to hydrolyze an enzyme by non-unique reference");
+    }
 
   public:
-    void load_enzyme(const char* token, IObject** out) noexcept final {
+    void synthesize_enzyme(const char* token, IObject** out) noexcept final {
         *out = nullptr;
         if (boost::starts_with(token, "dll:"))
             try {
@@ -88,20 +93,31 @@ class CatSynV1EnzymeAdaptor final : public Object, public IEnzymeAdapter, public
                     "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z");
                 init_func(&this->nucl, out);
                 if (*out)
-                    loaded.emplace_back(std::move(lib));
+                    loaded.emplace(*out, std::move(lib));
             } catch (boost::dll::fs::system_error&) {
             }
     }
 
+    void hydrolyze_enzyme(IObject** inout) noexcept final {
+        auto it = loaded.find(*inout);
+        if (it != loaded.end()) {
+            if (!(*inout)->is_unique())
+                hydrolyze_non_unique();
+            (*inout)->release();
+            *inout = nullptr;
+            loaded.erase(it);
+        }
+    }
+
     void clone(IObject** out) const noexcept final {
-        *out = new CatSynV1EnzymeAdaptor(this->nucl);
+        *out = new CatSynV1Ribosome(this->nucl);
         (*out)->add_ref();
     }
 
-    explicit CatSynV1EnzymeAdaptor(Nucleus& nucl) : Shuttle(nucl) {}
+    explicit CatSynV1Ribosome(Nucleus& nucl) : Shuttle(nucl) {}
 };
 
-void Nucleus::create_catsyn_v1_enzyme_adapter(IEnzymeAdapter** out) noexcept {
-    *out = new CatSynV1EnzymeAdaptor(*this);
+void Nucleus::create_catsyn_v1_ribosome(IRibosome** out) noexcept {
+    *out = new CatSynV1Ribosome(*this);
     (*out)->add_ref();
 }

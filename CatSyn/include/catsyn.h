@@ -37,7 +37,7 @@ class IObject {
     }
 
     bool is_unique() const noexcept {
-        return refcount.load(std::memory_order_acq_rel) == 1;
+        return refcount.load(std::memory_order_acquire) == 1;
     }
 
     virtual void clone(IObject** out) const noexcept = 0;
@@ -103,7 +103,7 @@ class IFrame;
 class IFactory;
 class ILogger;
 class IEnzymeFinder;
-class IEnzymeAdapter;
+class IRibosome;
 
 class INucleus : virtual public IObject {
   public:
@@ -113,7 +113,7 @@ class INucleus : virtual public IObject {
     virtual ILogger* get_logger() noexcept = 0;
 
     virtual ITable* get_enzyme_finders() noexcept = 0;
-    virtual ITable* get_enzyme_adapters() noexcept = 0;
+    virtual ITable* get_ribosomes() noexcept = 0;
 };
 
 class IFactory : virtual public IObject {
@@ -126,7 +126,7 @@ class IFactory : virtual public IObject {
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
 
     virtual void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept = 0;
-    virtual void create_catsyn_v1_enzyme_adapter(IEnzymeAdapter** out) noexcept = 0;
+    virtual void create_catsyn_v1_ribosome(IRibosome** out) noexcept = 0;
 };
 
 enum class ColorFamily {
@@ -196,12 +196,13 @@ class IEnzyme : virtual public IObject {};
 
 class IEnzymeFinder : virtual public IObject {
   public:
-    virtual size_t find_enzyme(const char* const** out) noexcept = 0;
+    virtual size_t find(const char* const** tokens) noexcept = 0;
 };
 
-class IEnzymeAdapter : virtual public IObject {
+class IRibosome : virtual public IObject {
   public:
-    virtual void load_enzyme(const char* token, IObject** out) noexcept = 0;
+    virtual void synthesize_enzyme(const char* token, IObject** out) noexcept = 0;
+    virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

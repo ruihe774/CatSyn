@@ -4,18 +4,18 @@
 
 #include <catimpl.h>
 
-Nucleus::Nucleus() : enzyme_finders(nullptr), enzyme_adapters(nullptr) {
-    cat_ptr<ITable> finders;
-    create_table(0, finders.put());
-    enzyme_finders = TableView<ITable>(std::move(finders));
+Nucleus::Nucleus() : finders(nullptr), ribosomes(nullptr) {
+    cat_ptr<ITable> f;
+    create_table(0, f.put());
+    finders = TableView<ITable>(std::move(f));
 
-    cat_ptr<ITable> adapters;
-    create_table(1, adapters.put());
-    enzyme_adapters = TableView<ITable>(std::move(adapters));
+    cat_ptr<ITable> r;
+    create_table(1, r.put());
+    ribosomes = TableView<ITable>(std::move(r));
 
-    cat_ptr<IEnzymeAdapter> csv1;
-    create_catsyn_v1_enzyme_adapter(csv1.put());
-    enzyme_adapters.set("catsyn::v1", csv1.get());
+    cat_ptr<IRibosome> csv1;
+    create_catsyn_v1_ribosome(csv1.put());
+    ribosomes.set("catsyn::v1", csv1.get());
 }
 
 void Nucleus::clone(IObject** out) const noexcept {
@@ -31,11 +31,11 @@ ILogger* Nucleus::get_logger() noexcept {
 }
 
 ITable* Nucleus::get_enzyme_finders() noexcept {
-    return enzyme_finders.table.get();
+    return finders.table.get();
 }
 
-ITable* Nucleus::get_enzyme_adapters() noexcept {
-    return enzyme_adapters.table.get();
+ITable* Nucleus::get_ribosomes() noexcept {
+    return ribosomes.table.get();
 }
 
 void Nucleus::calling_thread_init() noexcept {

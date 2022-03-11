@@ -75,8 +75,8 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     AllocStat alloc_stat;
     Logger logger;
 
-    TableView<ITable> enzyme_finders;
-    TableView<ITable> enzyme_adapters;
+    TableView<ITable> finders;
+    TableView<ITable> ribosomes;
 
     Nucleus();
 
@@ -88,7 +88,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     ILogger* get_logger() noexcept final;
 
     ITable* get_enzyme_finders() noexcept final;
-    ITable* get_enzyme_adapters() noexcept final;
+    ITable* get_ribosomes() noexcept final;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
     void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;
@@ -99,7 +99,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     void create_table(size_t reserve_capacity, ITable** out) noexcept final;
 
     void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept final;
-    void create_catsyn_v1_enzyme_adapter(IEnzymeAdapter** out) noexcept final;
+    void create_catsyn_v1_ribosome(IRibosome** out) noexcept final;
 };
 
 class Shuttle {
