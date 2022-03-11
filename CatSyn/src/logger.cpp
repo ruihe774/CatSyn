@@ -8,17 +8,22 @@
 #ifdef _WIN32
 
 #include <Windows.h>
-#include <io.h>
+
+static void throw_system_error() {
+    throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
+}
 
 static bool check_support_ascii_escape() noexcept {
     DWORD mode;
-    if (!GetConsoleMode(reinterpret_cast<HANDLE>(_get_osfhandle(2)), &mode))
+    if (!GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &mode))
         return false;
     return mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
 
 void write_err(const char* s, size_t n) noexcept {
-    _fwrite_nolock(s, n, 1, stderr);
+    // WriteFile always write all if success
+    if (!WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr))
+        throw_system_error();
 }
 
 static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
@@ -36,6 +41,7 @@ static bool check_support_ascii_escape() noexcept {
 }
 
 void write_err(const char* s, size_t n) noexcept {
+    // XXX: sync?
     fwrite_unlocked(s, n, 1, stderr);
 }
 
