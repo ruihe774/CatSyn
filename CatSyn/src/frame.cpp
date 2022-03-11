@@ -25,8 +25,7 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
     }
 
     void clone(IObject** out) const noexcept final {
-        *out = new Bytes(this->nucl, this->buf, this->len);
-        (*out)->add_ref();
+        create_instance<Bytes>(out, this->nucl, this->buf, this->len);
     }
 
     void realloc(size_t new_size) noexcept final {
@@ -51,8 +50,7 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
     }
 
     void clone(IObject** out) const noexcept final {
-        *out = new AlignedBytes(this->nucl, this->buf, this->len);
-        (*out)->add_ref();
+        create_instance<AlignedBytes>(out, this->nucl, this->buf, this->len);
     }
 
     void realloc(size_t new_size) noexcept final {
@@ -68,18 +66,15 @@ class NumberArray final : public Bytes, public INumberArray {
 };
 
 void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept {
-    *out = new Bytes(*this, data, len);
-    (*out)->add_ref();
+    create_instance<Bytes>(out, *this, data, len);
 }
 
 void Nucleus::create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept {
-    *out = new AlignedBytes(*this, data, len);
-    (*out)->add_ref();
+    create_instance<AlignedBytes>(out, *this, data, len);
 }
 
 void Nucleus::create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept {
-    *out = new NumberArray(*this, sample_type, data, len);
-    (*out)->add_ref();
+    create_instance<NumberArray>(out, *this, sample_type, data, len);
 }
 
 void AllocStat::alloc(size_t size) noexcept {
@@ -173,13 +168,11 @@ class Frame final : public Object, public IFrame, public Shuttle {
     }
 
     void clone(IObject** out) const noexcept final {
-        *out = new Frame(this->nucl, fi, (const IAlignedBytes**)planes.data(), strides.data(), props.get());
-        (*out)->add_ref();
+        create_instance<Frame>(out, this->nucl, fi, (const IAlignedBytes**)planes.data(), strides.data(), props.get());
     }
 };
 
 void Nucleus::create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                            IFrame** out) noexcept {
-    *out = new Frame(*this, fi, planes, strides, props);
-    (*out)->add_ref();
+    create_instance<Frame>(out, *this, fi, planes, strides, props);
 }

@@ -173,6 +173,12 @@ template<typename T> class cat_ptr {
     }
 };
 
+template<typename T, typename U, typename... Args>
+void create_instance(U** out, Args&&... args) noexcept(noexcept(T(std::forward<Args>(args)...))) {
+    *out = new T(std::forward<Args>(args)...);
+    (*out)->add_ref();
+}
+
 template<typename T> cat_ptr<T> make_cat_ptr(T* p) noexcept {
     return p;
 }

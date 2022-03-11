@@ -45,8 +45,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
     explicit DllEnzymeFinder(std::filesystem::path path) : path(std::move(path)) {}
     explicit DllEnzymeFinder(const char* path) : path(normalize(path)) {}
     void clone(IObject** out) const noexcept final {
-        *out = new DllEnzymeFinder(path);
-        (*out)->add_ref();
+        create_instance<DllEnzymeFinder>(out, path);
     }
 
     size_t find(const char* const** out) noexcept final {
@@ -72,8 +71,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
 };
 
 void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept {
-    *out = new DllEnzymeFinder(path);
-    (*out)->add_ref();
+    create_instance<DllEnzymeFinder>(out, path);
 }
 
 class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
@@ -110,14 +108,12 @@ class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
     }
 
     void clone(IObject** out) const noexcept final {
-        *out = new CatSynV1Ribosome(this->nucl);
-        (*out)->add_ref();
+        create_instance<CatSynV1Ribosome>(out, this->nucl);
     }
 
     explicit CatSynV1Ribosome(Nucleus& nucl) : Shuttle(nucl) {}
 };
 
 void Nucleus::create_catsyn_v1_ribosome(IRibosome** out) noexcept {
-    *out = new CatSynV1Ribosome(*this);
-    (*out)->add_ref();
+    create_instance<CatSynV1Ribosome>(out, *this);
 }

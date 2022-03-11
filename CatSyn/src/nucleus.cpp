@@ -46,6 +46,5 @@ CAT_API void catsyn::create_nucleus(INucleus** out) {
     thread_init();
     mi_option_set_enabled_default(mi_option_large_os_pages, true);
 
-    *out = new Nucleus;
-    (*out)->add_ref();
+    create_instance<Nucleus>(out);
 }

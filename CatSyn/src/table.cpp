@@ -21,9 +21,8 @@ class Table final : public Object, public ITable {
             vec.resize(len);
     }
 
-    explicit Table(vector_type vec) : vec(std::move(vec)) {}
-
   public:
+    explicit Table(vector_type vec) : vec(std::move(vec)) {}
     explicit Table(size_t reserve_capacity) noexcept {
         vec.reserve(reserve_capacity);
     }
@@ -71,12 +70,10 @@ class Table final : public Object, public ITable {
     }
 
     void clone(IObject** out) const noexcept final {
-        *out = new Table(vec);
-        (*out)->add_ref();
+        create_instance<Table>(out, vec);
     }
 };
 
 void Nucleus::create_table(size_t reserve_capacity, ITable** out) noexcept {
-    *out = new Table(reserve_capacity);
-    (*out)->add_ref();
+    create_instance<Table>(out, reserve_capacity);
 }
