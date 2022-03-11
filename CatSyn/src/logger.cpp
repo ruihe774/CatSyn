@@ -89,6 +89,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
             sk->send_log(level, msg);
         else
             log_out(level, msg, enable_ascii_escape);
+        operator delete(msg);
     };
     try {
         while (true) {
