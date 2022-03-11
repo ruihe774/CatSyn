@@ -4,6 +4,7 @@
 #include <Windows.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/dll.hpp>
 
 #include <catimpl.h>
 
@@ -24,8 +25,8 @@ static std::filesystem::path get_current_dll_filename() noexcept {
 
 class DllEnzymeFinder final : public Object, public IEnzymeFinder {
     std::filesystem::path path;
-    mutable std::vector<std::string> tokens;
-    mutable std::unique_ptr<const char*[]> tokens_c_str;
+    std::vector<std::string> tokens;
+    std::unique_ptr<const char*[]> tokens_c_str;
 
     static std::filesystem::path normalize(const char* s) noexcept {
         std::filesystem::path path;
@@ -47,7 +48,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
         (*out)->add_ref();
     }
 
-    size_t find_enzyme(const char* const** out) const noexcept final {
+    size_t find_enzyme(const char* const** out) noexcept final {
         if (!tokens_c_str) {
             const std::string prefix = "dll:";
             if (path.has_filename())
@@ -74,6 +75,33 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
     (*out)->add_ref();
 }
 
+class CatSynV1EnzymeAdaptor final : public Object, public IEnzymeAdapter, public Shuttle {
+    std::vector<boost::dll::shared_library> loaded;
+
+  public:
+    void load_enzyme(const char* token, IObject** out) noexcept final {
+        *out = nullptr;
+        if (boost::starts_with(token, "dll:"))
+            try {
+                boost::dll::shared_library lib(token + 4);
+                auto init_func = lib.get<void(INucleus*, IObject**)>(
+                    "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z");
+                init_func(&this->nucl, out);
+                if (*out)
+                    loaded.emplace_back(std::move(lib));
+            } catch (boost::dll::fs::system_error&) {
+            }
+    }
+
+    void clone(IObject** out) const noexcept final {
+        *out = new CatSynV1EnzymeAdaptor(this->nucl);
+        (*out)->add_ref();
+    }
+
+    explicit CatSynV1EnzymeAdaptor(Nucleus& nucl) : Shuttle(nucl) {}
+};
+
 void Nucleus::create_catsyn_v1_enzyme_adapter(IEnzymeAdapter** out) noexcept {
-    not_implemented();
+    *out = new CatSynV1EnzymeAdaptor(*this);
+    (*out)->add_ref();
 }

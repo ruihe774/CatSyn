@@ -6,17 +6,16 @@
 #include <utility>
 
 #ifdef _WIN32
-#ifdef CAT_IMPL
-#define CAT_API __declspec(dllexport)
+#define CAT_EXPORT __declspec(dllexport)
+#define CAT_IMPORT __declspec(dllimport)
 #else
-#define CAT_API __declspec(dllimport)
+#define CAT_EXPORT __attribute__ ((visibility ("default")))
+#define CAT_IMPORT
 #endif
-#else
 #ifdef CAT_IMPL
-#define CAT_API __attribute__ ((visibility ("default")))
+#define CAT_API CAT_EXPORT
 #else
-#define CAT_API
-#endif
+#define CAT_API CAT_IMPORT
 #endif
 
 namespace catsyn {
@@ -197,12 +196,12 @@ class IEnzyme : virtual public IObject {};
 
 class IEnzymeFinder : virtual public IObject {
   public:
-    virtual size_t find_enzyme(const char* const** out) const noexcept = 0;
+    virtual size_t find_enzyme(const char* const** out) noexcept = 0;
 };
 
 class IEnzymeAdapter : virtual public IObject {
   public:
-    virtual void load_enzyme(const char* token, IObject** out) const noexcept = 0;
+    virtual void load_enzyme(const char* token, IObject** out) noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
