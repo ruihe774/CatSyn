@@ -34,6 +34,7 @@ add_library(catsyn SHARED
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_link_libraries(catsyn PRIVATE mimalloc-static)
+target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
     Boost::algorithm
     Boost::dll

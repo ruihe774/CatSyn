@@ -6,6 +6,8 @@
 #include <boost/sync/semaphore.hpp>
 #include <boost/thread/thread.hpp>
 
+#include <fmt/format.h>
+
 #define CAT_IMPL
 
 #include <cathelper.h>
@@ -116,3 +118,23 @@ class NotImplemted : public std::logic_error {
 [[noreturn]] inline void not_implemented() {
     throw NotImplemted();
 }
+
+[[noreturn]] inline void insufficient_buffer() {
+    throw std::runtime_error("insufficient buffer");
+}
+
+template<typename... Args> const char* format_c(fmt::format_string<Args...> fmt, Args&&... args) noexcept {
+    thread_local char buf[4096];
+    auto size = fmt::format_to_n(buf, sizeof(buf) - 1, std::move(fmt), std::forward<Args>(args)...).size;
+    if (size >= sizeof(buf))
+        insufficient_buffer();
+    buf[size] = 0;
+    return buf;
+}
+
+template<typename T, typename Char>
+struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception, T>>> : fmt::formatter<const char*> {
+    template<typename FormatContext> auto format(const std::exception& exc, FormatContext& ctx) {
+        return fmt::formatter<const char*>::format(exc.what(), ctx);
+    }
+};

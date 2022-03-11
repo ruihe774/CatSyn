@@ -85,6 +85,8 @@ add_subdirectory(mimalloc EXCLUDE_FROM_ALL)
 
 add_subdirectory(boost EXCLUDE_FROM_ALL)
 
+add_subdirectory(fmt EXCLUDE_FROM_ALL)
+
 add_subdirectory(CatSyn)
 
 if(CAT_BUILD_TESTS)

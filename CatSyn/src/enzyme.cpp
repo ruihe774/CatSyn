@@ -1,6 +1,6 @@
 #include <filesystem>
-#include <string>
 #include <map>
+#include <string>
 
 #include <Windows.h>
 
@@ -11,10 +11,6 @@
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
-[[noreturn]] static void insufficient_buffer() {
-    throw std::runtime_error("insufficient buffer");
-}
-
 static std::filesystem::path get_current_dll_filename() noexcept {
     auto current_module = reinterpret_cast<HMODULE>(&__ImageBase);
     wchar_t wbuf[2048];
@@ -24,7 +20,7 @@ static std::filesystem::path get_current_dll_filename() noexcept {
     return wbuf;
 }
 
-class DllEnzymeFinder final : public Object, public IEnzymeFinder {
+class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttle {
     std::filesystem::path path;
     std::vector<std::string> tokens;
     std::unique_ptr<const char*[]> tokens_c_str;
@@ -42,24 +38,31 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
     }
 
   public:
-    explicit DllEnzymeFinder(std::filesystem::path path) : path(std::move(path)) {}
-    explicit DllEnzymeFinder(const char* path) : path(normalize(path)) {}
+    DllEnzymeFinder(Nucleus& nucl, std::filesystem::path path) : Shuttle(nucl), path(std::move(path)) {}
+    DllEnzymeFinder(Nucleus& nucl, const char* path) : Shuttle(nucl), path(normalize(path)) {}
     void clone(IObject** out) const noexcept final {
-        create_instance<DllEnzymeFinder>(out, path);
+        create_instance<DllEnzymeFinder>(out, this->nucl, path);
     }
 
     size_t find(const char* const** out) noexcept final {
         if (!tokens_c_str) {
             const std::string prefix = "dll:";
-            if (path.has_filename())
+            if (path.has_filename()) {
+                if (std::filesystem::is_directory(path))
+                    nucl.logger.log(LogLevel::WARNING, format_c("DllEnzymeFinder: the given path '{}' is a directory "
+                                                                "(hint: append '/' or '\\' to search in directory)",
+                                                                path.string()));
                 tokens.emplace_back(prefix + path.string());
-            else
+            } else
                 try {
                     for (auto&& entry : std::filesystem::directory_iterator(path))
                         if (auto&& dll_path = entry.path();
                             entry.is_regular_file() && boost::iequals(dll_path.extension().string(), ".dll"))
                             tokens.emplace_back(prefix + dll_path.string());
                 } catch (std::filesystem::filesystem_error& err) {
+                    this->nucl.logger.log(
+                        LogLevel::WARNING,
+                        format_c("DllEnzymeFinder: failed to open directory '{}' ({})", path.string(), err));
                 }
             tokens_c_str = std::unique_ptr<const char*[]>(new const char*[tokens.size()]);
             for (size_t i = 0; i < tokens.size(); ++i)
@@ -71,7 +74,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder {
 };
 
 void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept {
-    create_instance<DllEnzymeFinder>(out, path);
+    create_instance<DllEnzymeFinder>(out, *this, path);
 }
 
 class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
