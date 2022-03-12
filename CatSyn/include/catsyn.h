@@ -104,6 +104,7 @@ class IFactory;
 class ILogger;
 class IEnzymeFinder;
 class IRibosome;
+class IEnzyme;
 
 class INucleus : virtual public IObject {
   public:
@@ -114,6 +115,9 @@ class INucleus : virtual public IObject {
 
     virtual ITable* get_enzyme_finders() noexcept = 0;
     virtual ITable* get_ribosomes() noexcept = 0;
+
+    virtual void synthesize_enzymes() noexcept = 0;
+    virtual ITable* get_enzymes() noexcept = 0;
 };
 
 class IFactory : virtual public IObject {
@@ -192,7 +196,11 @@ class ILogger : virtual public IObject {
     virtual void set_sink(ILogSink* in) noexcept = 0;
 };
 
-class IEnzyme : virtual public IObject {};
+class IEnzyme : virtual public IObject {
+  public:
+    virtual const char* get_identifier() const noexcept = 0;
+    virtual const char* get_namespace() const noexcept = 0;
+};
 
 class IEnzymeFinder : virtual public IObject {
   public:
@@ -201,6 +209,7 @@ class IEnzymeFinder : virtual public IObject {
 
 class IRibosome : virtual public IObject {
   public:
+    virtual const char* get_identifier() const noexcept = 0;
     virtual void synthesize_enzyme(const char* token, IObject** out) noexcept = 0;
     virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
 };

@@ -5,6 +5,7 @@
 #include <boost/lockfree/queue.hpp>
 #include <boost/sync/semaphore.hpp>
 #include <boost/thread/thread.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include <fmt/format.h>
 
@@ -77,8 +78,10 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     AllocStat alloc_stat;
     Logger logger;
 
-    TableView<ITable> finders;
-    TableView<ITable> ribosomes;
+    TypedTableView<ITable, IEnzymeFinder> finders;
+    TypedTableView<ITable, IRibosome> ribosomes;
+
+    TypedTableView<ITable, IEnzyme> enzymes;
 
     Nucleus();
 
@@ -102,6 +105,9 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept final;
     void create_catsyn_v1_ribosome(IRibosome** out) noexcept final;
+
+    void synthesize_enzymes() noexcept final;
+    ITable* get_enzymes() noexcept final;
 };
 
 class Shuttle {
