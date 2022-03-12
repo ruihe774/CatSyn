@@ -138,6 +138,8 @@ template<typename T> void dedup(std::vector<T>& vec) {
 }
 
 void Nucleus::synthesize_enzymes() noexcept {
+    auto old_refcount = this->acquire_refcount();
+
     std::vector<std::string_view> tokens;
     for (auto finder : finders) {
         const char* const* p;
@@ -188,4 +190,9 @@ void Nucleus::synthesize_enzymes() noexcept {
         enzymes.table->set(ref, entry.second.get());
         ++ref;
     }
+
+    auto new_refcount = this->acquire_refcount();
+    if (old_refcount != new_refcount)
+        logger.log(LogLevel::WARNING, "Nucleus: reference count changed during enzyme synthesis! "
+                                      "Some enzymes may added reference to nucleus, which is not allowed");
 }

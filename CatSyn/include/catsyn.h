@@ -36,8 +36,14 @@ class IObject {
         }
     }
 
+  protected:
+    size_t acquire_refcount() const noexcept {
+        return refcount.load(std::memory_order_acquire);
+    }
+
+  public:
     bool is_unique() const noexcept {
-        return refcount.load(std::memory_order_acquire) == 1;
+        return acquire_refcount() == 1;
     }
 
     virtual void clone(IObject** out) const noexcept = 0;
