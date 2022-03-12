@@ -20,10 +20,29 @@ static bool check_support_ascii_escape() noexcept {
     return mode & ENABLE_VIRTUAL_TERMINAL_PROCESSING;
 }
 
+static size_t u2w(const char* s, const size_t len, const wchar_t** out) noexcept {
+    thread_local wchar_t wbuf[2048];
+    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, static_cast<int>(len), wbuf, sizeof(wbuf));
+    if (wlen == 0)
+        insufficient_buffer();
+    *out = &wbuf[0];
+    return wlen;
+}
+
 void write_err(const char* s, size_t n) noexcept {
-    // WriteFile always write all if success
-    if (!WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr))
-        throw_system_error();
+    static int is_terminal = -1;
+    if (is_terminal == -1) {
+        DWORD mode;
+        is_terminal = GetConsoleMode(GetStdHandle(STD_ERROR_HANDLE), &mode);
+    }
+    if (is_terminal) {
+        const wchar_t* ws;
+        WriteConsoleW(GetStdHandle(STD_ERROR_HANDLE), ws, u2w(s, n, &ws), nullptr, nullptr);
+    } else {
+        // WriteFile always write all if success
+        if (!WriteFile(GetStdHandle(STD_ERROR_HANDLE), s, n, nullptr, nullptr))
+            throw_system_error();
+    }
 }
 
 static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
@@ -34,8 +53,8 @@ static void set_thread_priority(boost::thread& thread, int priority, bool allow_
 
 #else
 
-#include <unistd.h>
 #include <errno.h>
+#include <unistd.h>
 
 [[noreturn]] static void throw_system_error() {
     throw std::system_error(errno, std::system_category());
@@ -110,7 +129,8 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
     }
 }
 
-Logger::Logger() : filter_level(LogLevel::DEBUG), thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()) {
+Logger::Logger()
+    : filter_level(LogLevel::DEBUG), thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()) {
     set_thread_priority(thread, -1, false);
 }
 
