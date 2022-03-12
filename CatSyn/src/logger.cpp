@@ -9,7 +9,7 @@
 
 #include <Windows.h>
 
-static void throw_system_error() {
+[[noreturn]] static void throw_system_error() {
     throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
 }
 
@@ -35,14 +35,21 @@ static void set_thread_priority(boost::thread& thread, int priority, bool allow_
 #else
 
 #include <unistd.h>
+#include <errno.h>
+
+[[noreturn]] static void throw_system_error() {
+    throw std::system_error(errno, std::system_category());
+}
 
 static bool check_support_ascii_escape() noexcept {
     return isatty(2);
 }
 
 void write_err(const char* s, size_t n) noexcept {
-    // XXX: sync?
-    fwrite_unlocked(s, n, 1, stderr);
+    // Linux delivers signals to the main thread by default
+    // so we cannot be interrupted
+    if (write(2, s, n) != n)
+        throw_system_error();
 }
 
 static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
