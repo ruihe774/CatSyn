@@ -1,11 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <optional>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/sync/semaphore.hpp>
 #include <boost/thread/thread.hpp>
-#include <boost/container/flat_map.hpp>
 
 #include <fmt/format.h>
 
@@ -73,15 +74,34 @@ class Logger final : public Object, public ILogger {
     ~Logger() final;
 };
 
+class Table final : public Object, public ITable {
+    typedef std::vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>> vector_type;
+    vector_type vec;
+
+    size_t norm_ref(size_t ref) const noexcept;
+    void expand(size_t len) noexcept;
+
+  public:
+    explicit Table(vector_type vec) noexcept;
+    explicit Table(size_t reserve_capacity) noexcept;
+    size_t size() const noexcept final;
+    const IObject* get(size_t ref) const noexcept final;
+    void set(size_t ref, const IObject* obj) noexcept final;
+    size_t get_ref(const char* key) const noexcept final;
+    const char* get_key(size_t ref) const noexcept final;
+    void set_key(size_t ref, const char* key) noexcept final;
+    void clone(IObject** out) const noexcept final;
+};
+
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
     AllocStat alloc_stat;
     Logger logger;
 
-    TypedTableView<ITable, IEnzymeFinder> finders;
-    TypedTableView<ITable, IRibosome> ribosomes;
+    TypedTableView<Table, IEnzymeFinder> finders;
+    TypedTableView<Table, IRibosome> ribosomes;
 
-    TypedTableView<ITable, IEnzyme> enzymes;
+    TypedTableView<Table, IEnzyme> enzymes;
 
     Nucleus();
 

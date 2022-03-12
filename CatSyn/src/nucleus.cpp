@@ -7,17 +7,17 @@
 Nucleus::Nucleus() : finders(nullptr), ribosomes(nullptr), enzymes(nullptr) {
     cat_ptr<ITable> t;
     create_table(0, t.put());
-    finders = decltype(finders)(std::move(t));
+    finders = decltype(finders)(t.query<Table>());
 
     create_table(1, t.put());
-    ribosomes = decltype(ribosomes)(std::move(t));
+    ribosomes = decltype(ribosomes)(t.query<Table>());
 
     cat_ptr<IRibosome> csv1;
     create_catsyn_v1_ribosome(csv1.put());
     ribosomes.set(csv1->get_identifier(), csv1.get());
 
     create_table(0, t.put());
-    enzymes = decltype(enzymes)(std::move(t));
+    enzymes = decltype(enzymes)(t.query<Table>());
 }
 
 void Nucleus::clone(IObject** out) const noexcept {
