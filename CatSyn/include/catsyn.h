@@ -196,10 +196,13 @@ class ILogger : virtual public IObject {
     virtual void set_sink(ILogSink* in) noexcept = 0;
 };
 
+class IFunction;
+
 class IEnzyme : virtual public IObject {
   public:
     virtual const char* get_identifier() const noexcept = 0;
     virtual const char* get_namespace() const noexcept = 0;
+    virtual const ITable* get_functions() const noexcept = 0;
 };
 
 class IEnzymeFinder : virtual public IObject {
@@ -212,6 +215,11 @@ class IRibosome : virtual public IObject {
     virtual const char* get_identifier() const noexcept = 0;
     virtual void synthesize_enzyme(const char* token, IObject** out) noexcept = 0;
     virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
+};
+
+class IFunction : virtual public IObject {
+  public:
+    virtual void operator()(ITable* args, IObject** out) = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

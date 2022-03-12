@@ -546,4 +546,50 @@ inline IEnzyme* get_enzyme_by_ns(INucleus* nucl, const char* ns) noexcept {
     return nullptr;
 }
 
+namespace detail {
+template<typename F> class FunctionWrapper : public IFunction {
+    F f;
+
+  public:
+    explicit FunctionWrapper(F f) noexcept : f(std::move(f)) {}
+
+    void operator()(ITable* args, IObject** out) override {
+        f(args, out);
+    }
+
+    void drop() noexcept override {
+        delete this;
+    }
+
+    void clone(IObject** out) const noexcept override {
+        create_instance<FunctionWrapper>(out, f);
+    }
+};
+} // namespace detail
+
+template<typename F> cat_ptr<IFunction> wrap_func(F&& f) noexcept {
+    return new detail::FunctionWrapper(std::forward<F>(f));
+}
+
+inline void set_table(ITable* table, const char* key, const IObject* val) noexcept {
+    auto ref = table->size();
+    table->set_key(ref, key);
+    table->set(ref, val);
+}
+
+template<typename U>
+inline void set_table(const cat_ptr<ITable>& table, const char* key, const cat_ptr<U>& val) noexcept {
+    set_table(table.get(), key, val.get());
+}
+
+inline void set_table(const cat_ptr<ITable>& table, const char* key, const IObject* val) noexcept {
+    set_table(table.get(), key, val);
+}
+
+template<typename T, typename V, typename... Args, typename = std::enable_if_t<sizeof...(Args) != 0>>
+void set_table(T table, const char* key, V val, Args&&... args) noexcept {
+    set_table(table, key, val);
+    set_table(table, std::forward<Args>(args)...);
+}
+
 } // namespace catsyn
