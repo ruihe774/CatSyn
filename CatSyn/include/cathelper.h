@@ -531,4 +531,19 @@ template<typename T, typename U> class TableView<T, U, false> : public TableView
 template<typename T> using TableView = detail::TableView<T, IObject, std::is_const_v<T>>;
 template<typename T, typename U> using TypedTableView = detail::TableView<T, U, std::is_const_v<T>>;
 
+inline IEnzyme* get_enzyme_by_id(INucleus* nucl, const char* id) noexcept {
+    auto enzymes = nucl->get_enzymes();
+    return dynamic_cast<IEnzyme*>(const_cast<IObject*>(enzymes->get(enzymes->get_ref(id))));
+}
+
+inline IEnzyme* get_enzyme_by_ns(INucleus* nucl, const char* ns) noexcept {
+    auto enzymes = nucl->get_enzymes();
+    auto size = enzymes->size();
+    for (size_t ref = 0; ref < size; ++ref)
+        if (auto enzyme = dynamic_cast<IEnzyme*>(const_cast<IObject*>(enzymes->get(ref)));
+            enzyme && strcmp(enzyme->get_namespace(), ns) == 0)
+            return enzyme;
+    return nullptr;
+}
+
 } // namespace catsyn
