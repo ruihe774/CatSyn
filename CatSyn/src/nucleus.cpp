@@ -20,10 +20,6 @@ Nucleus::Nucleus() : finders(nullptr), ribosomes(nullptr), enzymes(nullptr) {
     enzymes = decltype(enzymes)(t.query<Table>());
 }
 
-void Nucleus::clone(IObject** out) const noexcept {
-    not_implemented();
-}
-
 IFactory* Nucleus::get_factory() noexcept {
     return this;
 }

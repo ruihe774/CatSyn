@@ -560,10 +560,6 @@ template<typename F> class FunctionWrapper : public IFunction {
     void drop() noexcept override {
         delete this;
     }
-
-    void clone(IObject** out) const noexcept override {
-        create_instance<FunctionWrapper>(out, f);
-    }
 };
 } // namespace detail
 

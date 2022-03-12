@@ -105,8 +105,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     Nucleus();
 
-    void clone(IObject** out) const noexcept final;
-
     void calling_thread_init() noexcept final;
 
     IFactory* get_factory() noexcept final;

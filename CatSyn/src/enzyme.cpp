@@ -40,9 +40,6 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
   public:
     DllEnzymeFinder(Nucleus& nucl, std::filesystem::path path) : Shuttle(nucl), path(std::move(path)) {}
     DllEnzymeFinder(Nucleus& nucl, const char* path) : Shuttle(nucl), path(normalize(path)) {}
-    void clone(IObject** out) const noexcept final {
-        create_instance<DllEnzymeFinder>(out, this->nucl, path);
-    }
 
     size_t find(const char* const** out) noexcept final {
         if (!tokens_c_str) {
@@ -114,10 +111,6 @@ class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
         }
     }
 
-    void clone(IObject** out) const noexcept final {
-        create_instance<CatSynV1Ribosome>(out, this->nucl);
-    }
-
     explicit CatSynV1Ribosome(Nucleus& nucl) : Shuttle(nucl) {}
 };
 
@@ -148,7 +141,7 @@ void Nucleus::synthesize_enzymes() noexcept {
     std::vector<std::string_view> tokens;
     for (auto finder : finders) {
         const char* const* p;
-        auto size = const_cast<IEnzymeFinder*>(finder.get())->find(&p);
+        auto size = finder.clone()->find(&p);
         tokens.reserve(tokens.size() + size);
         for (size_t i = 0; i < size; ++i)
             tokens.emplace_back(p[i]);
@@ -160,7 +153,7 @@ void Nucleus::synthesize_enzymes() noexcept {
         auto token = token_sv.data();
         for (auto it = ribosomes.begin(); it != ribosomes.end(); ++it) {
             cat_ptr<IObject> obj;
-            const_cast<IRibosome*>((*it).get())->synthesize_enzyme(token, obj.put());
+            (*it).clone()->synthesize_enzyme(token, obj.put());
             if (obj) {
                 // TODO: hydrolyze overwritten enzymes and ribosomes
                 if (auto enzyme = obj.try_query<IEnzyme>(); enzyme) {

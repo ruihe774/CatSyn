@@ -9,7 +9,7 @@
 #define CAT_EXPORT __declspec(dllexport)
 #define CAT_IMPORT __declspec(dllimport)
 #else
-#define CAT_EXPORT __attribute__ ((visibility ("default")))
+#define CAT_EXPORT __attribute__((visibility("default")))
 #define CAT_IMPORT
 #endif
 #ifdef CAT_IMPL
@@ -46,6 +46,14 @@ class IObject {
 
   protected:
     virtual void drop() noexcept = 0;
+};
+
+class IRef : virtual public IObject {
+  public:
+    void clone(IObject** out) const noexcept final {
+        *out = dynamic_cast<IObject*>(const_cast<IRef*>(this));
+        this->add_ref();
+    }
 };
 
 class ITable : virtual public IObject {
@@ -106,7 +114,7 @@ class IEnzymeFinder;
 class IRibosome;
 class IEnzyme;
 
-class INucleus : virtual public IObject {
+class INucleus : virtual public IRef {
   public:
     virtual void calling_thread_init() noexcept = 0;
 
@@ -120,11 +128,12 @@ class INucleus : virtual public IObject {
     virtual ITable* get_enzymes() noexcept = 0;
 };
 
-class IFactory : virtual public IObject {
+class IFactory : virtual public IRef {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
     virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
-    virtual void create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept = 0;
+    virtual void create_number_array(SampleType sample_type, const void* data, size_t len,
+                                     INumberArray** out) noexcept = 0;
     virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
@@ -198,26 +207,26 @@ class ILogger : virtual public IObject {
 
 class IFunction;
 
-class IEnzyme : virtual public IObject {
+class IEnzyme : virtual public IRef {
   public:
     virtual const char* get_identifier() const noexcept = 0;
     virtual const char* get_namespace() const noexcept = 0;
     virtual const ITable* get_functions() const noexcept = 0;
 };
 
-class IEnzymeFinder : virtual public IObject {
+class IEnzymeFinder : virtual public IRef {
   public:
     virtual size_t find(const char* const** tokens) noexcept = 0;
 };
 
-class IRibosome : virtual public IObject {
+class IRibosome : virtual public IRef {
   public:
     virtual const char* get_identifier() const noexcept = 0;
     virtual void synthesize_enzyme(const char* token, IObject** out) noexcept = 0;
     virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
 };
 
-class IFunction : virtual public IObject {
+class IFunction : virtual public IRef {
   public:
     virtual void operator()(ITable* args, IObject** out) = 0;
 };
