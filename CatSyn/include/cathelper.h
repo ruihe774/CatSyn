@@ -4,6 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
+#include <vector>
 
 #include <catsyn.h>
 
@@ -119,6 +120,11 @@ template<typename T> class cat_ptr {
         return const_cast<mutable_element_type**>(&m_ptr);
     }
 
+    pointer* put_const() noexcept {
+        reset();
+        return &m_ptr;
+    }
+
     pointer* addressof() noexcept {
         return &m_ptr;
     }
@@ -179,7 +185,7 @@ void create_instance(U** out, Args&&... args) noexcept(noexcept(T(std::forward<A
     (*out)->add_ref();
 }
 
-template<typename T> cat_ptr<T> make_cat_ptr(T* p) noexcept {
+template<typename T> cat_ptr<T> wrap_cat_ptr(T* p) noexcept {
     return p;
 }
 
@@ -418,17 +424,20 @@ inline IEnzyme* get_enzyme_by_ns(INucleus* nucl, const char* ns) noexcept {
     return nullptr;
 }
 
+inline void check_args(IFunction* func, ITable* args);
+
 namespace detail {
 template<typename F> class FunctionWrapper final : public IFunction {
     F f;
-    std::initializer_list<ArgSpec> arg_specs;
+    std::vector<ArgSpec> arg_specs;
     const std::type_info* out_type;
 
   public:
     FunctionWrapper(std::initializer_list<ArgSpec> arg_specs, const std::type_info* out_type, F f) noexcept
         : f(std::move(f)), arg_specs(arg_specs), out_type(out_type) {}
 
-    void call(ITable* args, IObject** out) final {
+    void call(ITable* args, const IObject** out) final {
+        check_args(this, args);
         f(args, out);
     }
 
@@ -437,7 +446,7 @@ template<typename F> class FunctionWrapper final : public IFunction {
     }
 
     size_t get_arg_specs(const ArgSpec** out) const noexcept final {
-        *out = data(arg_specs);
+        *out = arg_specs.data();
         return arg_specs.size();
     };
 
@@ -453,8 +462,11 @@ cat_ptr<IFunction> wrap_func(std::initializer_list<ArgSpec> arg_specs, const std
 }
 
 inline void set_table(ITable* table, const char* key, const IObject* val) noexcept {
-    auto ref = table->size();
-    table->set_key(ref, key);
+    auto ref = table->get_ref(key);
+    if (ref == ITable::npos) {
+        ref = table->size();
+        table->set_key(ref, key);
+    }
     table->set(ref, val);
 }
 
@@ -471,6 +483,105 @@ template<typename T, typename V, typename... Args, typename = std::enable_if_t<s
 void set_table(T table, const char* key, V val, Args&&... args) noexcept {
     set_table(table, key, val);
     set_table(table, std::forward<Args>(args)...);
+}
+
+inline cat_ptr<ITable> create_arg_table(IFactory* factory, const ArgSpec* specs, size_t arg_count) noexcept {
+    cat_ptr<ITable> table;
+    factory->create_table(arg_count, table.put());
+    for (size_t ref = 0; ref < arg_count; ++ref)
+        table->set_key(ref, specs[ref].name);
+    return table;
+}
+
+inline void check_args(const ArgSpec* specs, size_t arg_count, ITable* args) {
+    thread_local char buf[4096];
+    if (arg_count != args->size()) {
+        sprintf(buf, "invalid number of arguments (expected %llu, got %llu)", arg_count, args->size());
+        throw std::invalid_argument(buf);
+    }
+    for (size_t ref = 0; ref < arg_count; ++ref) {
+        if (strcmp(specs[ref].name, args->get_key(ref)) != 0) {
+            snprintf(buf, sizeof(buf), "invalid argument name at %llu (expected '%s', got '%s')", ref, specs[ref].name,
+                     args->get_key(ref));
+            throw std::invalid_argument(buf);
+        }
+        if (specs[ref].required && !args->get(ref)) {
+            snprintf(buf, sizeof(buf), "missing required argument '%s'", specs[ref].name);
+            throw std::invalid_argument(buf);
+        }
+        if (auto obj = const_cast<IObject*>(args->get(ref)); obj && !runtime_dynamic_cast(specs[ref].type, obj)) {
+            snprintf(buf, sizeof(buf), "invalid type for argument '%s' (expected '%s' or derived, got '%s')",
+                     specs[ref].name, specs[ref].type.name(), typeid(obj).name());
+            throw std::invalid_argument(buf);
+        }
+    }
+}
+
+inline cat_ptr<ITable> create_arg_table(IFactory* factory, IFunction* func) noexcept {
+    const ArgSpec* specs;
+    return create_arg_table(factory, specs, func->get_arg_specs(&specs));
+}
+
+inline void check_args(IFunction* func, ITable* args) {
+    const ArgSpec* specs;
+    check_args(specs, func->get_arg_specs(&specs), args);
+}
+
+template<typename R, typename = std::enable_if_t<!std::is_same_v<R, void>>>
+cat_ptr<const R> call_func(IFunction* func, ITable* args) {
+    cat_ptr<const IObject> out;
+    func->call(args, out.put_const());
+    return out.template query<const R>();
+}
+
+template<typename R, typename = std::enable_if_t<!std::is_same_v<R, void>>>
+cat_ptr<const R> call_func(const cat_ptr<IFunction>& func, const cat_ptr<ITable>& args) {
+    return call_func<R>(func.get(), args.get());
+}
+
+template<typename R, typename... Args, typename = std::enable_if_t<!std::is_same_v<R, void>>>
+cat_ptr<const R> vcall_func(IFactory* factory, IFunction* func, Args&&... args) {
+    auto arg_table = create_arg_table(factory, func);
+    set_table(arg_table, std::forward<Args>(args)...);
+    return call_func<R>(func, arg_table.get());
+}
+
+template<typename R, typename... Args, typename = std::enable_if_t<!std::is_same_v<R, void>>>
+cat_ptr<const R> vcall_func(IFactory* factory, const cat_ptr<IFunction>& func, Args&&... args) {
+    return vcall_func<R>(factory, func.get(), std::forward<Args>(args)...);
+}
+
+template<typename R, typename = std::enable_if_t<std::is_same_v<R, void>>>
+void call_func(IFunction* func, ITable* args) {
+    cat_ptr<const IObject> out;
+    func->call(args, out.put_const());
+    if (out)
+        throw std::logic_error("function has return value");
+}
+
+template<typename R, typename = std::enable_if_t<std::is_same_v<R, void>>>
+void call_func(IFunction* func, const cat_ptr<ITable>& args) {
+    call_func<R>(func, args.get());
+}
+
+template<typename R, typename... Args, typename = std::enable_if_t<std::is_same_v<R, void>>>
+void vcall_func(IFactory* factory, IFunction* func, Args&&... args) {
+    auto arg_table = create_arg_table(factory, func);
+    set_table(arg_table, std::forward<Args>(args)...);
+    call_func<R>(func, arg_table.get());
+}
+
+template<typename R, typename... Args, typename = std::enable_if_t<std::is_same_v<R, void>>>
+void vcall_func(IFactory* factory, const cat_ptr<IFunction>& func, Args&&... args) {
+    vcall_func<R>(factory, func.get(), std::forward<Args>(args)...);
+}
+
+template<typename T> ArgSpec required_arg(const char* name) noexcept {
+    return ArgSpec{name, typeid(T), true};
+}
+
+template<typename T> ArgSpec optional_arg(const char* name) noexcept {
+    return ArgSpec{name, typeid(T), false};
 }
 
 } // namespace catsyn

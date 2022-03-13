@@ -52,7 +52,7 @@ CAT_API void catsyn::create_nucleus(INucleus** out) {
 }
 
 #ifdef _WIN32
-CAT_API void* runtime_dynamic_cast(const std::type_info& dst_type, IObject* src) {
+CAT_API void* catsyn::runtime_dynamic_cast(const std::type_info& dst_type, IObject* src) {
     // XXX: I don't know this is correct or not
     return __RTDynamicCast(src, 0, (void*)&typeid(IObject), (void*)&dst_type, 0);
 }
