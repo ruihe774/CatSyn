@@ -322,167 +322,40 @@ template<typename T> using BytesView = detail::BytesView<T, std::is_const_v<T>>;
 
 namespace detail {
 
-template<typename T, typename U, bool immutable> class TableView {};
+template<typename T, bool immutable> class TableView {};
 
-template<typename T, typename U> class TableViewIterator;
-
-template<typename T, typename U>
-bool operator<(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept;
-
-template<typename T, typename U>
-size_t operator-(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept;
-
-template<typename T, typename U> class TableViewIterator {
-    const TableView<T, U, true>& view;
-    size_t ref;
-
-    friend class TableView<T, U, true>;
-    friend class TableView<T, U, false>;
-    friend bool operator< <T, U>(const TableViewIterator&, const TableViewIterator&) noexcept;
-    friend size_t operator- <T, U>(const TableViewIterator&, const TableViewIterator&) noexcept;
-
-    TableViewIterator(const TableView<T, U, true>& view, size_t ref) noexcept : view(view), ref(ref) {}
-
-  public:
-    TableViewIterator(const TableViewIterator&) noexcept = default;
-    TableViewIterator(TableViewIterator&&) noexcept = default;
-
-    auto operator*() const noexcept {
-        return view.template get<U>(ref);
-    }
-
-    auto& operator++() noexcept {
-        ++ref;
-        return *this;
-    }
-
-    auto operator++(int) noexcept {
-        auto old = *this;
-        operator++();
-        return old;
-    }
-
-    auto& operator--() noexcept {
-        --ref;
-        return *this;
-    }
-
-    auto operator--(int) noexcept {
-        auto old = *this;
-        operator--();
-        return old;
-    }
-
-    auto& operator+=(size_t inc) noexcept {
-        ref += inc;
-        return *this;
-    }
-
-    auto& operator-=(size_t dec) noexcept {
-        ref -= dec;
-        return *this;
-    }
-};
-
-template<typename T, typename U>
-bool operator<(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    if (&lhs.view != &rhs.view)
-        return &lhs.view < &rhs.view;
-    else
-        return lhs.ref < rhs.ref;
-}
-
-template<typename T, typename U>
-bool operator>(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return rhs < lhs;
-}
-
-template<typename T, typename U>
-bool operator==(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return !(lhs < rhs) && !(lhs > rhs);
-}
-
-template<typename T, typename U>
-bool operator!=(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return !(lhs == rhs);
-}
-
-template<typename T, typename U>
-bool operator<=(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return lhs < rhs || lhs == rhs;
-}
-
-template<typename T, typename U>
-bool operator>=(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return lhs > rhs || lhs == rhs;
-}
-
-template<typename T, typename U> auto operator+(TableViewIterator<T, U> lhs, size_t rhs) noexcept {
-    return lhs += rhs;
-}
-
-template<typename T, typename U> auto operator-(TableViewIterator<T, U> lhs, size_t rhs) noexcept {
-    return lhs -= rhs;
-}
-
-template<typename T, typename U>
-size_t operator-(const TableViewIterator<T, U>& lhs, const TableViewIterator<T, U>& rhs) noexcept {
-    return lhs.ref - rhs.ref;
-}
-
-template<typename T, typename U> class TableView<T, U, true> {
+template<typename T> class TableView<T, true> {
   public:
     typedef std::enable_if_t<std::is_base_of_v<ITable, std::remove_const_t<T>>, T> table_type;
 
     cat_ptr<table_type> table;
 
-    friend class TableViewIterator<T, U>;
-
     explicit TableView(table_type* table) noexcept : table(table) {}
     explicit TableView(cat_ptr<table_type> table) noexcept : table(std::move(table)) {}
-    template<typename W, bool immutable>
-    explicit TableView(TableView<T, W, immutable> other) : table(std::move(other.table)) {}
 
-  protected:
-    template<typename V> cat_ptr<const V> get(size_t ref) const {
+  public:
+    template<typename U> cat_ptr<const U> get(size_t ref) const {
         if (cat_ptr<const IObject> p = table->get(ref); p)
-            return p.query<const V>();
+            return p.query<const U>();
         else
             return nullptr;
     }
 
-  public:
-    template<typename V> cat_ptr<const V> get(const char* key) const {
-        return get<V>(table->get_ref(key));
+    template<typename U> cat_ptr<const U> get(const char* key) const {
+        return get<U>(table->get_ref(key));
     }
 
-    template<typename V> catsyn::BytesView<const V> get_array(const char* key) const {
-        return catsyn::BytesView<const V>{get<IBytes>(key)};
+    template<typename U> catsyn::BytesView<const U> get_array(const char* key) const {
+        return catsyn::BytesView<const U>{get<IBytes>(key)};
     }
 
     size_t size() const noexcept {
         return table->size();
     }
-
-    auto begin() const noexcept {
-        return TableViewIterator<T, U>(*this, 0);
-    }
-
-    auto end() const noexcept {
-        return TableViewIterator<T, U>(*this, size());
-    }
-
-    cat_ptr<const U> operator[](const char* key) const noexcept {
-        return get<U>(key);
-    }
-
-    template<typename W> auto as_type() const noexcept {
-        return TableView<T, W, true>(*this);
-    }
 };
 
-template<typename T, typename U> class TableView<T, U, false> : public TableView<T, U, true> {
-    typedef TableView<T, U, true> Base;
+template<typename T> class TableView<T, false> : public TableView<T, true> {
+    typedef TableView<T, true> Base;
 
   public:
     using Base::TableView;
@@ -498,7 +371,7 @@ template<typename T, typename U> class TableView<T, U, false> : public TableView
         this->table->set(ref, in);
     }
 
-    template<typename V> void set(const char* key, const cat_ptr<V>& in) noexcept {
+    template<typename U> void set(const char* key, const cat_ptr<U>& in) noexcept {
         set(key, in.get());
     }
 
@@ -511,15 +384,15 @@ template<typename T, typename U> class TableView<T, U, false> : public TableView
         this->table->set_key(ref, nullptr);
     }
 
-    template<typename V> cat_ptr<V> modify(const char* key) {
+    template<typename U> cat_ptr<U> modify(const char* key) {
         auto ref = this->table->get_ref(key);
         if (ref == ITable::npos)
             return nullptr;
         auto p = this->table->get(ref);
         if (p->is_unique())
-            return make_cat_ptr(const_cast<IObject*>(p)).template query<V>();
+            return make_cat_ptr(const_cast<IObject*>(p)).template query<U>();
         else {
-            auto new_p = make_cat_ptr(p).template query<const V>().clone();
+            auto new_p = make_cat_ptr(p).template query<const U>().clone();
             this->table->set(ref, new_p.get());
             return new_p;
         }
@@ -528,8 +401,7 @@ template<typename T, typename U> class TableView<T, U, false> : public TableView
 
 } // namespace detail
 
-template<typename T> using TableView = detail::TableView<T, IObject, std::is_const_v<T>>;
-template<typename T, typename U> using TypedTableView = detail::TableView<T, U, std::is_const_v<T>>;
+template<typename T> using TableView = detail::TableView<T, std::is_const_v<T>>;
 
 inline IEnzyme* get_enzyme_by_id(INucleus* nucl, const char* id) noexcept {
     auto enzymes = nucl->get_enzymes();

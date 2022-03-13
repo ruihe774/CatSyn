@@ -98,10 +98,10 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     AllocStat alloc_stat;
     Logger logger;
 
-    TypedTableView<Table, IEnzymeFinder> finders;
-    TypedTableView<Table, IRibosome> ribosomes;
+    TableView<Table> finders;
+    TableView<Table> ribosomes;
 
-    TypedTableView<Table, IEnzyme> enzymes;
+    TableView<Table> enzymes;
 
     Nucleus();
 

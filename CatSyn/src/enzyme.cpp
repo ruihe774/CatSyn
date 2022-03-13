@@ -141,7 +141,9 @@ void Nucleus::synthesize_enzymes() noexcept {
     auto old_refcount = this->acquire_refcount();
 
     std::vector<std::string_view> tokens;
-    for (auto finder : finders) {
+    for (size_t ref = 0; ref < finders.size(); ++ref) {
+        auto finder = finders.get<IEnzymeFinder>(ref);
+        if (!finder) continue;
         const char* const* p;
         auto size = finder.clone()->find(&p);
         tokens.reserve(tokens.size() + size);
@@ -153,9 +155,11 @@ void Nucleus::synthesize_enzymes() noexcept {
     for (auto token_sv : tokens) {
         // we are sure that tokens are null terminated!
         auto token = token_sv.data();
-        for (auto it = ribosomes.begin(); it != ribosomes.end(); ++it) {
+        for (size_t ref = 0; ref < ribosomes.size(); ++ref) {
+            auto ribosome = ribosomes.get<IRibosome>(ref);
+            if (!ribosome) continue;
             cat_ptr<IObject> obj;
-            (*it).clone()->synthesize_enzyme(token, obj.put());
+            ribosome.clone()->synthesize_enzyme(token, obj.put());
             if (obj) {
                 // TODO: hydrolyze overwritten enzymes and ribosomes
                 if (auto enzyme = obj.try_query<IEnzyme>(); enzyme) {
@@ -169,7 +173,7 @@ void Nucleus::synthesize_enzymes() noexcept {
                     ezs.emplace_hint(jt, id, std::move(enzyme));
                 } else if (auto ribosome = obj.try_query<IRibosome>(); ribosome) {
                     auto id = ribosome->get_identifier();
-                    if (ribosomes[id])
+                    if (ribosomes.get<IObject>(id))
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: ribosome '{}' is registered multiple times", id));
                     else
