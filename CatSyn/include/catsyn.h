@@ -4,6 +4,7 @@
 #include <atomic>
 #include <new>
 #include <utility>
+#include <typeinfo>
 
 #ifdef _WIN32
 #define CAT_EXPORT __declspec(dllexport)
@@ -232,9 +233,17 @@ class IRibosome : virtual public IRef {
     virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
 };
 
+struct ArgSpec {
+    const char* name;
+    std::type_info type;
+    bool required;
+};
+
 class IFunction : virtual public IRef {
   public:
     virtual void operator()(ITable* args, IObject** out) = 0;
+    virtual void get_arg_specs(const ArgSpec** out) const noexcept = 0;
+    virtual std::type_info get_out_type() const noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
