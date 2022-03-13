@@ -493,6 +493,17 @@ inline cat_ptr<ITable> create_arg_table(IFactory* factory, const ArgSpec* specs,
     return table;
 }
 
+
+#ifdef _WIN32
+#ifdef __clang__
+extern "C" void* __RTDynamicCast(void* inptr, long VfDelta, void* SrcType, void* TargetType, int isReference);
+#endif
+inline void* runtime_dynamic_cast(const std::type_info& dst_type, IObject* src) {
+    // XXX: I don't know this is correct or not
+    return __RTDynamicCast(src, 0, (void*)&typeid(IObject), (void*)&dst_type, 0);
+}
+#endif
+
 inline void check_args(const ArgSpec* specs, size_t arg_count, ITable* args) {
     thread_local char buf[4096];
     if (arg_count != args->size()) {

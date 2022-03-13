@@ -247,6 +247,5 @@ class IFunction : virtual public IRef {
 };
 
 CAT_API void create_nucleus(INucleus** out);
-CAT_API void* runtime_dynamic_cast(const std::type_info& dst_type, IObject* src);
 
 } // namespace catsyn
