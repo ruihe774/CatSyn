@@ -241,9 +241,9 @@ struct ArgSpec {
 
 class IFunction : virtual public IRef {
   public:
-    virtual void operator()(ITable* args, IObject** out) = 0;
-    virtual void get_arg_specs(const ArgSpec** out) const noexcept = 0;
-    virtual const std::type_info& get_out_type() const noexcept = 0;
+    virtual void call(ITable* args, IObject** out) = 0;
+    virtual size_t get_arg_specs(const ArgSpec** out) const noexcept = 0;
+    virtual const std::type_info* get_out_type() const noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

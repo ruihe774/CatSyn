@@ -419,24 +419,37 @@ inline IEnzyme* get_enzyme_by_ns(INucleus* nucl, const char* ns) noexcept {
 }
 
 namespace detail {
-template<typename F> class FunctionWrapper : public IFunction {
+template<typename F> class FunctionWrapper final : public IFunction {
     F f;
+    std::initializer_list<ArgSpec> arg_specs;
+    const std::type_info* out_type;
 
   public:
-    explicit FunctionWrapper(F f) noexcept : f(std::move(f)) {}
+    FunctionWrapper(std::initializer_list<ArgSpec> arg_specs, const std::type_info* out_type, F f) noexcept
+        : f(std::move(f)), arg_specs(arg_specs), out_type(out_type) {}
 
-    void operator()(ITable* args, IObject** out) override {
+    void call(ITable* args, IObject** out) final {
         f(args, out);
     }
 
-    void drop() noexcept override {
+    void drop() noexcept final {
         delete this;
+    }
+
+    size_t get_arg_specs(const ArgSpec** out) const noexcept final {
+        *out = data(arg_specs);
+        return arg_specs.size();
+    };
+
+    const std::type_info* get_out_type() const noexcept final {
+        return out_type;
     }
 };
 } // namespace detail
 
-template<typename F> cat_ptr<IFunction> wrap_func(F&& f) noexcept {
-    return new detail::FunctionWrapper(std::forward<F>(f));
+template<typename F>
+cat_ptr<IFunction> wrap_func(std::initializer_list<ArgSpec> arg_specs, const std::type_info* out_type, F f) noexcept {
+    return new detail::FunctionWrapper(arg_specs, out_type, std::move(f));
 }
 
 inline void set_table(ITable* table, const char* key, const IObject* val) noexcept {
