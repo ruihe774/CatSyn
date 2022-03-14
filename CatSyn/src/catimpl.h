@@ -2,11 +2,11 @@
 
 #include <atomic>
 #include <optional>
+#include <thread>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/sync/semaphore.hpp>
-#include <boost/thread/thread.hpp>
 
 #include <fmt/format.h>
 
@@ -38,24 +38,20 @@ void write_err(const char* s, size_t n) noexcept;
 
 void thread_init() noexcept;
 
-class Thread final : public boost::thread {
-    template<typename F, typename... Args> static void proxy(F f, Args... args) {
+class Thread final : public std::thread {
+    template<typename F, typename... Args> static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
         thread_init();
-        f(std::forward<Args>(args)...);
+        std::invoke(f, std::forward<Args>(args)...);
     }
 
-    template<typename T, bool c> struct unbox_reference_if {};
-    template<typename T> struct unbox_reference_if<T, true> {
-        typedef typename boost::unwrap_reference<T>::type& type;
-    };
-    template<typename T> struct unbox_reference_if<T, false> { typedef T type; };
-    template<typename T>
-    using unbox_reference_t = typename unbox_reference_if<T, boost::is_reference_wrapper<T>::value>::type;
+    template<typename T> struct unbox_reference { typedef T type; };
+    template<typename U> struct unbox_reference<std::reference_wrapper<U>> { typedef std::add_lvalue_reference_t<U> type; };
+    template<typename T> using unbox_reference_t = typename unbox_reference<T>::type;
 
   public:
     template<typename F, typename... Args>
     explicit Thread(F f, Args&&... args)
-        : boost::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
+        : std::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
 class Logger final : public Object, public ILogger {
@@ -63,6 +59,7 @@ class Logger final : public Object, public ILogger {
     mutable boost::sync::semaphore semaphore;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
+    bool stop;
     Thread thread;
 
   public:

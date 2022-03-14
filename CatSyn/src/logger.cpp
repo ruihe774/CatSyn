@@ -45,7 +45,7 @@ void write_err(const char* s, size_t n) noexcept {
     }
 }
 
-static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
+static void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept {
     HANDLE hThread = thread.native_handle();
     SetThreadPriority(hThread, priority);
     SetThreadPriorityBoost(hThread, !allow_boost);
@@ -71,7 +71,7 @@ void write_err(const char* s, size_t n) noexcept {
         throw_system_error();
 }
 
-static void set_thread_priority(boost::thread& thread, int priority, bool allow_boost = true) noexcept {
+static void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept {
     // TODO: implement this
 }
 
@@ -106,36 +106,31 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
 }
 
 static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue,
-                       boost::sync::semaphore& semaphore, ILogSink** sink) {
+                       boost::sync::semaphore& semaphore, ILogSink*& sink, const bool& stop) noexcept {
     bool enable_ascii_escape = check_support_ascii_escape();
     auto f = [=](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);
         auto msg = reinterpret_cast<char*>(record & ~static_cast<uintptr_t>(3));
-        if (auto sk = *sink; sk)
-            sk->send_log(level, msg);
+        if (sink)
+            sink->send_log(level, msg);
         else
             log_out(level, msg, enable_ascii_escape);
         operator delete(msg);
     };
-    try {
-        while (true) {
-            boost::this_thread::interruption_point();
-            semaphore.wait();
-            queue.consume_all(f);
-        }
-    } catch (boost::thread_interrupted&) {
+    while (!stop) {
+        semaphore.wait();
         queue.consume_all(f);
-        throw;
     }
+    queue.consume_all(f);
 }
 
 Logger::Logger()
-    : filter_level(LogLevel::DEBUG), thread(log_worker, boost::ref(queue), boost::ref(semaphore), sink.addressof()) {
+    : filter_level(LogLevel::DEBUG), stop(false), thread(log_worker, std::ref(queue), std::ref(semaphore), std::ref(*sink.addressof()), std::cref(stop)) {
     set_thread_priority(thread, -1, false);
 }
 
 Logger::~Logger() {
-    thread.interrupt();
+    stop = true;
     semaphore.post();
     thread.join();
 }

@@ -38,7 +38,6 @@ target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
     Boost::algorithm
     Boost::dll
-    Boost::thread
     Boost::sync
     Boost::lockfree
     Boost::stacktrace)
