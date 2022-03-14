@@ -4,7 +4,13 @@
 
 #include <catimpl.h>
 
-Nucleus::Nucleus() : finders(nullptr), ribosomes(nullptr), enzymes(nullptr) {
+NucleusConfig get_default_config() noexcept {
+    return NucleusConfig {
+        std::thread::hardware_concurrency(), 4096
+    };
+}
+
+Nucleus::Nucleus() : config(get_default_config()), finders(nullptr), ribosomes(nullptr), enzymes(nullptr) {
     cat_ptr<ITable> t;
     create_table(0, t.put());
     finders = decltype(finders)(t.query<Table>());
@@ -42,6 +48,14 @@ ITable* Nucleus::get_enzymes() noexcept {
 
 void Nucleus::calling_thread_init() noexcept {
     thread_init();
+}
+
+void Nucleus::set_config(NucleusConfig cfg) noexcept {
+    config = cfg;
+}
+
+NucleusConfig Nucleus::get_config() const noexcept {
+    return config;
 }
 
 CAT_API void catsyn::create_nucleus(INucleus** out) {

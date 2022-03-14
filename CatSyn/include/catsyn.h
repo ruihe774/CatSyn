@@ -123,6 +123,11 @@ class IEnzyme;
 class ISubstrate;
 class IFilter;
 
+struct NucleusConfig {
+    unsigned thread_count;
+    unsigned mem_hint_mb;
+};
+
 class INucleus : virtual public IRef {
   public:
     virtual void calling_thread_init() noexcept = 0;
@@ -137,6 +142,9 @@ class INucleus : virtual public IRef {
     virtual ITable* get_enzymes() noexcept = 0;
 
     virtual void register_filter(const IFilter* in, ISubstrate** out) noexcept = 0;
+
+    virtual void set_config(NucleusConfig config) noexcept = 0;
+    virtual NucleusConfig get_config() const noexcept = 0;
 };
 
 class IFactory : virtual public IRef {

@@ -92,6 +92,7 @@ class Table final : public Object, public ITable {
 
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
+    NucleusConfig config;
     AllocStat alloc_stat;
     Logger logger;
 
@@ -125,6 +126,9 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     ITable* get_enzymes() noexcept final;
 
     void register_filter(const IFilter* in, ISubstrate** out) noexcept final;
+
+    void set_config(NucleusConfig config) noexcept final;
+    NucleusConfig get_config() const noexcept final;
 };
 
 class Substrate final : public Object, public ISubstrate {
