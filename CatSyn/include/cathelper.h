@@ -445,9 +445,9 @@ template<typename F> class FunctionWrapper final : public IFunction {
         delete this;
     }
 
-    size_t get_arg_specs(const ArgSpec** out) const noexcept final {
-        *out = arg_specs.data();
-        return arg_specs.size();
+    const ArgSpec* get_arg_specs(size_t* len) const noexcept final {
+        *len = arg_specs.size();
+        return arg_specs.data();
     };
 
     const std::type_info* get_out_type() const noexcept final {
@@ -529,13 +529,15 @@ inline void check_args(const ArgSpec* specs, size_t arg_count, ITable* args) {
 }
 
 inline cat_ptr<ITable> create_arg_table(IFactory* factory, IFunction* func) noexcept {
-    const ArgSpec* specs;
-    return create_arg_table(factory, specs, func->get_arg_specs(&specs));
+    size_t len;
+    auto specs = func->get_arg_specs(&len);
+    return create_arg_table(factory, specs, len);
 }
 
 inline void check_args(IFunction* func, ITable* args) {
-    const ArgSpec* specs;
-    check_args(specs, func->get_arg_specs(&specs), args);
+    size_t len;
+    auto specs = func->get_arg_specs(&len);
+    check_args(specs, len, args);
 }
 
 template<typename R, typename = std::enable_if_t<!std::is_same_v<R, void>>>

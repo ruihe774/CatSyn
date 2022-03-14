@@ -41,7 +41,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
     DllEnzymeFinder(Nucleus& nucl, std::filesystem::path path) : Shuttle(nucl), path(std::move(path)) {}
     DllEnzymeFinder(Nucleus& nucl, const char* path) : Shuttle(nucl), path(normalize(path)) {}
 
-    size_t find(const char* const** out) noexcept final {
+    const char* const* find(size_t* len) noexcept final {
         if (!tokens_c_str) {
             const std::string prefix = "dll:";
             if (path.has_filename()) {
@@ -65,8 +65,8 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
             for (size_t i = 0; i < tokens.size(); ++i)
                 tokens_c_str[i] = tokens[i].c_str();
         }
-        *out = tokens_c_str.get();
-        return tokens.size();
+        *len = tokens.size();
+        return tokens_c_str.get();
     }
 };
 
@@ -144,8 +144,8 @@ void Nucleus::synthesize_enzymes() noexcept {
     for (size_t ref = 0; ref < finders.size(); ++ref) {
         auto finder = finders.get<IEnzymeFinder>(ref);
         if (!finder) continue;
-        const char* const* p;
-        auto size = finder.clone()->find(&p);
+        size_t size;
+        auto p = finder.clone()->find(&size);
         tokens.reserve(tokens.size() + size);
         for (size_t i = 0; i < size; ++i)
             tokens.emplace_back(p[i]);

@@ -223,7 +223,7 @@ class IEnzyme : virtual public IRef {
 
 class IEnzymeFinder : virtual public IRef {
   public:
-    virtual size_t find(const char* const** tokens) noexcept = 0;
+    virtual const char* const* find(size_t* len) noexcept = 0;
 };
 
 class IRibosome : virtual public IRef {
@@ -242,7 +242,7 @@ struct ArgSpec {
 class IFunction : virtual public IRef {
   public:
     virtual void invoke(ITable* args, const IObject** out) = 0;
-    virtual size_t get_arg_specs(const ArgSpec** out) const noexcept = 0;
+    virtual const ArgSpec* get_arg_specs(size_t* len) const noexcept = 0;
     virtual const std::type_info* get_out_type() const noexcept = 0;
 };
 
