@@ -3,6 +3,7 @@
 #include <atomic>
 #include <optional>
 #include <thread>
+#include <mutex>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -122,30 +123,34 @@ class Substrate final : public Object, public ISubstrate {
 };
 
 struct FrameInstance {
-    const Substrate* substrate;
-    std::atomic<IFrame*> product;
+    const cat_ptr<Substrate> substrate;
     const size_t frame_idx;
-    const size_t input_count;
-    std::array<std::atomic<FrameInstance*>, 12> inputs;
-    std::atomic_size_t output_count;
-    std::array<std::atomic<FrameInstance*>, 111> outputs;
+    cat_ptr<IFrame> product;
+    const std::vector<FrameInstance*> inputs;
+    std::vector<FrameInstance*> outputs;
+    std::mutex processing_mutex;
 
-    FrameInstance(const Substrate* substrate, size_t frame_idx,
-                  std::initializer_list<std::atomic<FrameInstance*>> inputs,
-                  std::initializer_list<std::atomic<FrameInstance*>> outputs) noexcept;
-    ~FrameInstance();
+    FrameInstance(Substrate* substrate, size_t frame_idx,
+                  std::initializer_list<FrameInstance*> inputs,
+                  std::initializer_list<FrameInstance*> outputs) noexcept;
 };
 
 class MaintainTask {
     uintptr_t p;
-    size_t idx;
+    size_t v;
 
   public:
-    Substrate* get_substrate() const noexcept;
-    size_t get_frame_idx() const noexcept;
-    bool is_construction() const noexcept;
+    enum class Type {
+        Construct,
+        Notify,
+        Collect,
+    };
 
-    static MaintainTask create(Substrate*, size_t, bool) noexcept;
+    void* get_pointer() const noexcept;
+    size_t get_value() const noexcept;
+    Type get_type() const noexcept;
+
+    static MaintainTask create(Type, void*, size_t) noexcept;
 };
 
 class Nucleus final : public Object, public INucleus, public IFactory {
@@ -159,10 +164,10 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     TableView<Table> enzymes{nullptr};
 
     std::atomic_bool stop{false};
-    std::vector<std::thread> threads;
-    std::optional<std::thread> maintainer;
-    Semaphore process_semaphore;
-    boost::lockfree::queue<FrameInstance*> process_queue;
+    std::vector<Thread> worker_threads;
+    std::optional<Thread> maintainer_thread;
+    Semaphore work_semaphore;
+    boost::lockfree::queue<FrameInstance*> work_queue;
     Semaphore maintain_semaphore{0, 1};
     boost::lockfree::queue<MaintainTask> maintain_queue;
 
@@ -197,6 +202,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     NucleusConfig get_config() const noexcept final;
 
     void react() noexcept final;
+    bool is_reacting() const noexcept final;
 };
 
 class Shuttle {

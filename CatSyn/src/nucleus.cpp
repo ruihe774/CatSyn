@@ -28,13 +28,13 @@ Nucleus::Nucleus() {
 
 Nucleus::~Nucleus() {
     stop.store(true, std::memory_order_release);
-    for (auto&& t : threads)
-        process_semaphore.release();
-    for (auto&& t : threads)
+    for (auto&& t : worker_threads)
+        work_semaphore.release();
+    for (auto&& t : worker_threads)
         t.join();
     maintain_semaphore.release();
-    if (maintainer)
-        maintainer->join();
+    if (maintainer_thread)
+        maintainer_thread->join();
 }
 
 IFactory* Nucleus::get_factory() noexcept {
@@ -61,7 +61,14 @@ void Nucleus::calling_thread_init() noexcept {
     thread_init();
 }
 
+[[noreturn]] static void throw_set_config_when_reacting() {
+    throw std::logic_error("changing config is not allowed during reaction");
+}
+
 void Nucleus::set_config(NucleusConfig cfg) noexcept {
+    // XXX: may race
+    if (is_reacting())
+        throw_set_config_when_reacting();
     config = cfg;
 }
 

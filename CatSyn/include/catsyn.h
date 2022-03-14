@@ -147,6 +147,7 @@ class INucleus : virtual public IRef {
     virtual NucleusConfig get_config() const noexcept = 0;
 
     virtual void react() noexcept = 0;
+    virtual bool is_reacting() const noexcept = 0;
 };
 
 class IFactory : virtual public IRef {
@@ -274,7 +275,7 @@ class IFilter : virtual public IObject {
   public:
     virtual VideoInfo get_video_info() const noexcept = 0;
     virtual const FrameSource* get_frame_dependency(size_t frame_idx) const noexcept = 0;
-    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources, size_t source_count) = 0;
+    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources, size_t source_count, IFrame** out) = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
