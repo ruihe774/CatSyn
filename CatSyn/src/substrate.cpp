@@ -38,12 +38,13 @@ MaintainTask::Type MaintainTask::get_type() const noexcept {
 static void worker(Semaphore& work_semaphore, Semaphore& maintain_semaphore,
                    boost::lockfree::queue<FrameInstance*>& work_queue,
                    boost::lockfree::queue<MaintainTask>& maintain_queue, const std::atomic_bool& stop) noexcept;
-static void maintainer(Nucleus& nucl, Semaphore& semaphore, boost::lockfree::queue<MaintainTask>& queue,
-                       const std::atomic_bool& stop) noexcept;
+static void maintainer(Semaphore& work_semaphore, Semaphore& maintain_semaphore,
+                       boost::lockfree::queue<FrameInstance*>& work_queue,
+                       boost::lockfree::queue<MaintainTask>& maintain_queue, const std::atomic_bool& stop) noexcept;
 
 void Nucleus::react() noexcept {
-    maintainer_thread =
-        Thread(maintainer, std::ref(*this), std::ref(maintain_semaphore), std::ref(maintain_queue), std::cref(stop));
+    maintainer_thread = Thread(maintainer, std::ref(work_semaphore), std::ref(maintain_semaphore), std::ref(work_queue),
+                               std::ref(maintain_queue), std::cref(stop));
     for (size_t i = 0; i < config.thread_count; ++i)
         worker_threads.emplace_back(worker, std::ref(work_semaphore), std::ref(maintain_semaphore),
                                     std::ref(work_queue), std::ref(maintain_queue), std::cref(stop));
@@ -92,6 +93,31 @@ void worker(Semaphore& work_semaphore, Semaphore& maintain_semaphore,
             }
         early_exit:
             lock.unlock();
+        });
+    }
+}
+
+static bool check_all_inputs_ready(FrameInstance* inst) {
+    return std::all_of(inst->inputs.begin(), inst->inputs.end(), [](FrameInstance* input) { return !!input->product; });
+}
+
+void maintainer(Semaphore& work_semaphore, Semaphore& maintain_semaphore,
+                boost::lockfree::queue<FrameInstance*>& work_queue,
+                boost::lockfree::queue<MaintainTask>& maintain_queue, const std::atomic_bool& stop) noexcept {
+    while (true) {
+        maintain_semaphore.acquire();
+        if (stop.load(std::memory_order_acquire))
+            break;
+        maintain_queue.consume_all([&](MaintainTask task) {
+            switch (task.get_type()) {
+            case MaintainTask::Type::Notify: {
+                auto inst = static_cast<FrameInstance*>(task.get_pointer());
+                for (auto output : inst->outputs)
+                    if (check_all_inputs_ready(output))
+                        work_queue.push(output);
+                break;
+            }
+            }
         });
     }
 }
