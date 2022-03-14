@@ -29,6 +29,7 @@ add_library(catsyn SHARED
     src/logger.cpp
     src/new-delete-override.cpp
     src/nucleus.cpp
+    src/substrate.cpp
     src/table.cpp
     src/threading.cpp)
 target_include_directories(catsyn PUBLIC include)
@@ -37,6 +38,7 @@ target_link_libraries(catsyn PRIVATE mimalloc-static)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
     Boost::algorithm
+    Boost::container
     Boost::dll
     Boost::sync
     Boost::lockfree

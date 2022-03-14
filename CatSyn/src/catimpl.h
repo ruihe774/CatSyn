@@ -123,6 +123,18 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     void synthesize_enzymes() noexcept final;
     ITable* get_enzymes() noexcept final;
+
+    void register_filter(const IFilter* in, ISubstrate** out) noexcept final;
+};
+
+class Substrate final : public Object, public ISubstrate {
+  public:
+    const VideoInfo vi;
+    boost::container::flat_map<std::thread::id, cat_ptr<IFilter>> filters;
+
+    VideoInfo get_video_info() const noexcept final;
+
+    explicit Substrate(cat_ptr<const IFilter> filter) noexcept;
 };
 
 class Shuttle {

@@ -120,6 +120,8 @@ class ILogger;
 class IEnzymeFinder;
 class IRibosome;
 class IEnzyme;
+class ISubstrate;
+class IFilter;
 
 class INucleus : virtual public IRef {
   public:
@@ -133,6 +135,8 @@ class INucleus : virtual public IRef {
 
     virtual void synthesize_enzymes() noexcept = 0;
     virtual ITable* get_enzymes() noexcept = 0;
+
+    virtual void register_filter(const IFilter* in, ISubstrate** out) noexcept = 0;
 };
 
 class IFactory : virtual public IRef {
@@ -244,6 +248,23 @@ class IFunction : virtual public IRef {
     virtual void invoke(ITable* args, const IObject** out) = 0;
     virtual const ArgSpec* get_arg_specs(size_t* len) const noexcept = 0;
     virtual const std::type_info* get_out_type() const noexcept = 0;
+};
+
+class ISubstrate : virtual public IRef {
+  public:
+    virtual VideoInfo get_video_info() const noexcept = 0;
+};
+
+struct FrameSource {
+    const ISubstrate* substrate;
+    size_t frame_idx;
+};
+
+class IFilter : virtual public IObject {
+  public:
+    virtual VideoInfo get_video_info() const noexcept = 0;
+    virtual const FrameSource* get_frame_dependency(size_t frame_idx) const noexcept = 0;
+    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources, size_t source_count) = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);

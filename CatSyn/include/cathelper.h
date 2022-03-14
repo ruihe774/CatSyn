@@ -158,7 +158,7 @@ template<typename T> class cat_ptr {
         return dynamic_cast<U*>(m_ptr);
     }
 
-    cat_ptr<mutable_element_type> try_usurp() const noexcept {
+    cat_ptr<mutable_element_type> try_usurp() noexcept {
         if (m_ptr->is_unique())
             return const_cast<mutable_element_type*>(m_ptr);
         else
@@ -171,7 +171,7 @@ template<typename T> class cat_ptr {
         return {dynamic_cast<mutable_element_type*>(out), false};
     }
 
-    cat_ptr<mutable_element_type> usurp_or_clone() const noexcept {
+    cat_ptr<mutable_element_type> usurp_or_clone() noexcept {
         if (auto p = try_usurp(); p)
             return p;
         else
