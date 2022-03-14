@@ -145,6 +145,8 @@ class INucleus : virtual public IRef {
 
     virtual void set_config(NucleusConfig config) noexcept = 0;
     virtual NucleusConfig get_config() const noexcept = 0;
+
+    virtual void react() noexcept = 0;
 };
 
 class IFactory : virtual public IRef {

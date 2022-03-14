@@ -10,7 +10,7 @@ NucleusConfig get_default_config() noexcept {
     };
 }
 
-Nucleus::Nucleus() : config(get_default_config()), finders(nullptr), ribosomes(nullptr), enzymes(nullptr) {
+Nucleus::Nucleus() {
     cat_ptr<ITable> t;
     create_table(0, t.put());
     finders = decltype(finders)(t.query<Table>());
@@ -24,6 +24,17 @@ Nucleus::Nucleus() : config(get_default_config()), finders(nullptr), ribosomes(n
 
     create_table(0, t.put());
     enzymes = decltype(enzymes)(t.query<Table>());
+}
+
+Nucleus::~Nucleus() {
+    stop.store(true, std::memory_order_release);
+    for (auto&& t : threads)
+        process_semaphore.release();
+    for (auto&& t : threads)
+        t.join();
+    maintain_semaphore.release();
+    if (maintainer)
+        maintainer->join();
 }
 
 IFactory* Nucleus::get_factory() noexcept {

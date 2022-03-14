@@ -42,13 +42,16 @@ void write_err(const char* s, size_t n) noexcept;
 void thread_init() noexcept;
 
 class Thread final : public std::thread {
-    template<typename F, typename... Args> static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
+    template<typename F, typename... Args>
+    static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
         thread_init();
         std::invoke(f, std::forward<Args>(args)...);
     }
 
     template<typename T> struct unbox_reference { typedef T type; };
-    template<typename U> struct unbox_reference<std::reference_wrapper<U>> { typedef std::add_lvalue_reference_t<U> type; };
+    template<typename U> struct unbox_reference<std::reference_wrapper<U>> {
+        typedef std::add_lvalue_reference_t<U> type;
+    };
     template<typename T> using unbox_reference_t = typename unbox_reference<T>::type;
 
   public:
@@ -108,18 +111,63 @@ class Table final : public Object, public ITable {
     void clone(IObject** out) const noexcept final;
 };
 
+class Substrate final : public Object, public ISubstrate {
+  public:
+    const VideoInfo vi;
+    boost::container::flat_map<std::thread::id, cat_ptr<IFilter>> filters;
+
+    VideoInfo get_video_info() const noexcept final;
+
+    explicit Substrate(cat_ptr<const IFilter> filter) noexcept;
+};
+
+struct FrameInstance {
+    const Substrate* substrate;
+    std::atomic<IFrame*> product;
+    const size_t frame_idx;
+    const size_t input_count;
+    std::array<std::atomic<FrameInstance*>, 12> inputs;
+    std::atomic_size_t output_count;
+    std::array<std::atomic<FrameInstance*>, 111> outputs;
+
+    FrameInstance(const Substrate* substrate, size_t frame_idx,
+                  std::initializer_list<std::atomic<FrameInstance*>> inputs,
+                  std::initializer_list<std::atomic<FrameInstance*>> outputs) noexcept;
+    ~FrameInstance();
+};
+
+class MaintainTask {
+    uintptr_t p;
+    size_t idx;
+
+  public:
+    Substrate* get_substrate() const noexcept;
+    size_t get_frame_idx() const noexcept;
+    bool is_construction() const noexcept;
+
+    static MaintainTask create(Substrate*, size_t, bool) noexcept;
+};
+
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
-    NucleusConfig config;
+    NucleusConfig config{};
     AllocStat alloc_stat;
     Logger logger;
 
-    TableView<Table> finders;
-    TableView<Table> ribosomes;
+    TableView<Table> finders{nullptr};
+    TableView<Table> ribosomes{nullptr};
+    TableView<Table> enzymes{nullptr};
 
-    TableView<Table> enzymes;
+    std::atomic_bool stop{false};
+    std::vector<std::thread> threads;
+    std::optional<std::thread> maintainer;
+    Semaphore process_semaphore;
+    boost::lockfree::queue<FrameInstance*> process_queue;
+    Semaphore maintain_semaphore{0, 1};
+    boost::lockfree::queue<MaintainTask> maintain_queue;
 
     Nucleus();
+    ~Nucleus() final;
 
     void calling_thread_init() noexcept final;
 
@@ -147,16 +195,8 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     void set_config(NucleusConfig config) noexcept final;
     NucleusConfig get_config() const noexcept final;
-};
 
-class Substrate final : public Object, public ISubstrate {
-  public:
-    const VideoInfo vi;
-    boost::container::flat_map<std::thread::id, cat_ptr<IFilter>> filters;
-
-    VideoInfo get_video_info() const noexcept final;
-
-    explicit Substrate(cat_ptr<const IFilter> filter) noexcept;
+    void react() noexcept final;
 };
 
 class Shuttle {
