@@ -23,7 +23,7 @@ add_library(catsyn SHARED
     src/enzyme.cpp
     src/frame.cpp
     src/logger.cpp
-    src/new-delete-override.cpp
+    src/new-delete.cpp
     src/nucleus.cpp
     src/substrate.cpp
     src/table.cpp
