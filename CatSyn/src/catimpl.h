@@ -77,7 +77,7 @@ class Logger final : public Object, public ILogger {
     mutable Semaphore semaphore;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
-    bool stop;
+    std::atomic_bool stop;
     Thread thread;
 
   public:

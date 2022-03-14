@@ -105,8 +105,8 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
                                                                           prompt, clear, msg))));
 }
 
-static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue,
-                       Semaphore& semaphore, ILogSink*& sink, const bool& stop) noexcept {
+static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue, Semaphore& semaphore,
+                       ILogSink* const& sink, const std::atomic_bool& stop) noexcept {
     bool enable_ascii_escape = check_support_ascii_escape();
     auto f = [&](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);
@@ -117,7 +117,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
             log_out(level, msg, enable_ascii_escape);
         operator delete(msg);
     };
-    while (!stop) {
+    while (!stop.load(std::memory_order_acquire)) {
         semaphore.acquire();
         queue.consume_all(f);
     }
@@ -125,12 +125,13 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
 }
 
 Logger::Logger()
-    : semaphore(0, 1), filter_level(LogLevel::DEBUG), stop(false), thread(log_worker, std::ref(queue), std::ref(semaphore), std::ref(*sink.addressof()), std::cref(stop)) {
+    : semaphore(0, 1), filter_level(LogLevel::DEBUG), stop(false),
+      thread(log_worker, std::ref(queue), std::ref(semaphore), std::cref(*sink.addressof()), std::cref(stop)) {
     set_thread_priority(thread, -1, false);
 }
 
 Logger::~Logger() {
-    stop = true;
+    stop.store(true, std::memory_order_release);
     semaphore.release();
     thread.join();
 }
