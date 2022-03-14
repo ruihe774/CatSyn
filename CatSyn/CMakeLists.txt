@@ -10,10 +10,6 @@ if(MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4250")
 endif()
 
-add_library(boost_sync INTERFACE)
-add_library(Boost::sync ALIAS boost_sync)
-target_include_directories(boost_sync INTERFACE ../boost/libs/sync/include)
-
 if(WIN32)
     add_library(Boost::stacktrace ALIAS boost_stacktrace_windbg)
 else()
@@ -40,7 +36,6 @@ target_link_libraries(catsyn PRIVATE
     Boost::algorithm
     Boost::container
     Boost::dll
-    Boost::sync
     Boost::lockfree
     Boost::stacktrace)
 target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)

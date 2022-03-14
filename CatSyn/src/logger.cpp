@@ -9,7 +9,7 @@
 
 #include <Windows.h>
 
-[[noreturn]] static void throw_system_error() {
+[[noreturn]] void throw_system_error() {
     throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
 }
 
@@ -106,9 +106,9 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
 }
 
 static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue,
-                       boost::sync::semaphore& semaphore, ILogSink*& sink, const bool& stop) noexcept {
+                       Semaphore& semaphore, ILogSink*& sink, const bool& stop) noexcept {
     bool enable_ascii_escape = check_support_ascii_escape();
-    auto f = [=](uintptr_t record) {
+    auto f = [&](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);
         auto msg = reinterpret_cast<char*>(record & ~static_cast<uintptr_t>(3));
         if (sink)
@@ -118,20 +118,20 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
         operator delete(msg);
     };
     while (!stop) {
-        semaphore.wait();
+        semaphore.acquire();
         queue.consume_all(f);
     }
     queue.consume_all(f);
 }
 
 Logger::Logger()
-    : filter_level(LogLevel::DEBUG), stop(false), thread(log_worker, std::ref(queue), std::ref(semaphore), std::ref(*sink.addressof()), std::cref(stop)) {
+    : semaphore(0, 1), filter_level(LogLevel::DEBUG), stop(false), thread(log_worker, std::ref(queue), std::ref(semaphore), std::ref(*sink.addressof()), std::cref(stop)) {
     set_thread_priority(thread, -1, false);
 }
 
 Logger::~Logger() {
     stop = true;
-    semaphore.post();
+    semaphore.release();
     thread.join();
 }
 
@@ -147,7 +147,7 @@ void Logger::log(LogLevel level, const char* msg) const noexcept {
     memcpy(copied, msg, msg_len + 1);
     if (!queue.push(reinterpret_cast<uintptr_t>(copied) | static_cast<uintptr_t>(level) / 10))
         log_failed();
-    semaphore.post();
+    semaphore.release();
 }
 
 void Logger::set_level(LogLevel level) noexcept {

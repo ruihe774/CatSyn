@@ -4,9 +4,12 @@
 #include <optional>
 #include <thread>
 
+#ifdef _WIN32
+#include <Windows.h>
+#endif
+
 #include <boost/container/flat_map.hpp>
 #include <boost/lockfree/queue.hpp>
-#include <boost/sync/semaphore.hpp>
 
 #include <fmt/format.h>
 
@@ -54,9 +57,24 @@ class Thread final : public std::thread {
         : std::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
+class Semaphore {
+#ifdef _WIN32
+    HANDLE h;
+#endif
+  public:
+    explicit Semaphore(unsigned initial = 0, unsigned max = 0);
+    ~Semaphore();
+
+    void acquire();
+    void release();
+
+    Semaphore(const Semaphore&) = delete;
+    Semaphore& operator=(const Semaphore&) = delete;
+};
+
 class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
-    mutable boost::sync::semaphore semaphore;
+    mutable Semaphore semaphore;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
     bool stop;
@@ -159,6 +177,8 @@ class NotImplemted : public std::logic_error {
 [[noreturn]] inline void insufficient_buffer() {
     throw std::runtime_error("insufficient buffer");
 }
+
+[[noreturn]] void throw_system_error();
 
 template<typename... Args> const char* format_c(fmt::format_string<Args...> fmt, Args&&... args) noexcept {
     thread_local char buf[4096];
