@@ -436,9 +436,9 @@ template<typename F> class FunctionWrapper final : public IFunction {
     FunctionWrapper(std::initializer_list<ArgSpec> arg_specs, const std::type_info* out_type, F f) noexcept
         : f(std::move(f)), arg_specs(arg_specs), out_type(out_type) {}
 
-    void call(ITable* args, const IObject** out) final {
+    void invoke(ITable* args, const IObject** out) final {
         check_args(this, args);
-        f(args, out);
+        std::invoke(f, args, out);
     }
 
     void drop() noexcept final {
@@ -541,7 +541,7 @@ inline void check_args(IFunction* func, ITable* args) {
 template<typename R, typename = std::enable_if_t<!std::is_same_v<R, void>>>
 cat_ptr<const R> call_func(IFunction* func, ITable* args) {
     cat_ptr<const IObject> out;
-    func->call(args, out.put_const());
+    func->invoke(args, out.put_const());
     return out.template query<const R>();
 }
 
@@ -565,7 +565,7 @@ cat_ptr<const R> vcall_func(IFactory* factory, const cat_ptr<IFunction>& func, A
 template<typename R, typename = std::enable_if_t<std::is_same_v<R, void>>>
 void call_func(IFunction* func, ITable* args) {
     cat_ptr<const IObject> out;
-    func->call(args, out.put_const());
+    func->invoke(args, out.put_const());
     if (out)
         throw std::logic_error("function has return value");
 }
