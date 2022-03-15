@@ -251,3 +251,5 @@ struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception
         return fmt::formatter<const char*>::format(exc.what(), ctx);
     }
 };
+
+void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept;

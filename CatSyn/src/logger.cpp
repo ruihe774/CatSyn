@@ -45,7 +45,7 @@ void write_err(const char* s, size_t n) noexcept {
     }
 }
 
-static void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept {
+void set_thread_priority(std::thread& thread, int priority, bool allow_boost) noexcept {
     HANDLE hThread = thread.native_handle();
     SetThreadPriority(hThread, priority);
     SetThreadPriorityBoost(hThread, !allow_boost);
@@ -71,7 +71,7 @@ void write_err(const char* s, size_t n) noexcept {
         throw_system_error();
 }
 
-static void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept {
+void set_thread_priority(std::thread& thread, int priority, bool allow_boost) noexcept {
     // TODO: implement this
 }
 
