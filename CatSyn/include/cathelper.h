@@ -189,6 +189,16 @@ template<typename T> cat_ptr<T> wrap_cat_ptr(T* p) noexcept {
     return p;
 }
 
+inline FrameFormat make_frame_format(ColorFamily color_family, SampleType sample_type, unsigned bits_per_sample, unsigned width_subsampling, unsigned height_subsampling) noexcept {
+    FrameFormat ff;
+    ff.detail.color_family = color_family;
+    ff.detail.sample_type = sample_type;
+    ff.detail.bits_per_sample = bits_per_sample;
+    ff.detail.width_subsampling = width_subsampling;
+    ff.detail.height_subsampling = height_subsampling;
+    return ff;
+}
+
 inline unsigned bytes_per_sample(FrameFormat ff) noexcept {
     return (ff.detail.bits_per_sample + 7u) / 8u;
 }
@@ -581,7 +591,8 @@ void call_func(IFunction* func, const cat_ptr<ITable>& args) {
 template<typename R, typename... Args, typename = std::enable_if_t<std::is_same_v<R, void>>>
 void vcall_func(IFactory* factory, IFunction* func, Args&&... args) {
     auto arg_table = create_arg_table(factory, func);
-    set_table(arg_table, std::forward<Args>(args)...);
+    if constexpr (sizeof...(args) != 0)
+        set_table(arg_table, std::forward<Args>(args)...);
     call_func<R>(func, arg_table.get());
 }
 

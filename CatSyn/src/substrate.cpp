@@ -111,7 +111,7 @@ void worker(Nucleus& nucl) noexcept {
                         inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
                         inst->inputs.size(), product.put());
                 } catch (...) {
-                    std::array<std::byte, MaintainTask::payload_size> pl;
+                    std::array<std::byte, MaintainTask::payload_size> pl{};
                     *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
                     post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
                     goto early_exit;
@@ -205,7 +205,7 @@ FrameInstance* construct(Nucleus& nucl,
     if (auto it = instances.find(key); it != instances.end())
         return it->second.get();
 
-    auto& promoter = substrate->filters.find(position_zero)->second;
+    auto promoter = substrate->filters.find(position_zero)->second;
     if (substrate->filters.size() == 1)
         for (const auto& thread : nucl.worker_threads)
             if (auto id = thread.get_id(); !substrate->filters.contains(id))

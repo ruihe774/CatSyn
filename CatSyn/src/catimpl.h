@@ -146,6 +146,8 @@ class MaintainTask {
     static MaintainTask create(Type, void*, size_t, std::array<std::byte, payload_size> = {}) noexcept;
 };
 
+NucleusConfig get_default_config() noexcept;
+
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
     class AllocStat {
@@ -162,7 +164,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     Logger logger;
     AllocStat alloc_stat;
-    NucleusConfig config{};
+    NucleusConfig config{get_default_config()};
 
     TableView<Table> finders{nullptr};
     TableView<Table> ribosomes{nullptr};
