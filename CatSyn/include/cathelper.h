@@ -555,7 +555,8 @@ cat_ptr<const R> call_func(const cat_ptr<IFunction>& func, const cat_ptr<ITable>
 template<typename R, typename... Args, typename = std::enable_if_t<!std::is_same_v<R, void>>>
 cat_ptr<const R> vcall_func(IFactory* factory, IFunction* func, Args&&... args) {
     auto arg_table = create_arg_table(factory, func);
-    set_table(arg_table, std::forward<Args>(args)...);
+    if constexpr (sizeof...(args) != 0)
+        set_table(arg_table, std::forward<Args>(args)...);
     return call_func<R>(func, arg_table.get());
 }
 
