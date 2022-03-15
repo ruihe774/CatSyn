@@ -19,7 +19,7 @@ void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
 }
 
 FrameInstance::FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
-    : substrate(substrate), frame_idx(frame_idx) {}
+    : substrate(substrate), frame_idx(frame_idx), false_dep(false) {}
 
 MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v,
                                   std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
@@ -109,7 +109,7 @@ void worker(Nucleus& nucl) noexcept {
                 try {
                     inst->substrate->filters[std::this_thread::get_id()]->process_frame(
                         inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
-                        inst->inputs.size(), product.put());
+                        inst->inputs.size() - inst->false_dep, product.put());
                 } catch (...) {
                     std::array<std::byte, MaintainTask::payload_size> pl{};
                     *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
@@ -221,6 +221,13 @@ FrameInstance* construct(Nucleus& nucl,
         instc->inputs.emplace_back(input);
         input->outputs.emplace_back(instc.get());
     }
+
+    if ((promoter->get_filter_flags() & ffMakeLinear) && frame_idx)
+        if (auto prev = instances.find(std::make_pair(substrate, frame_idx - 1)); prev != instances.end()) {
+            instc->inputs.emplace_back(prev->second.get());
+            instc->false_dep = true;
+        }
+
     instc->callback = std::unique_ptr<IOutput::Callback>(callback);
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
 

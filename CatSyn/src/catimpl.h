@@ -119,6 +119,7 @@ struct FrameInstance {
     std::vector<FrameInstance*> outputs;
     std::mutex processing_mutex;
     std::unique_ptr<IOutput::Callback> callback;
+    bool false_dep;
 
     FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
 };
