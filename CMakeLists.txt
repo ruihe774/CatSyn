@@ -64,7 +64,7 @@ if(WIN32)
     if(GNULIKE)
         set(COMPILE_FLAGS "${COMPILE_FLAGS} -Wno-macro-redefined")
     else()
-        set(COMPILE_FLAGS "${COMPILE_FLAGS} /wd4005")
+        set(COMPILE_FLAGS "${COMPILE_FLAGS} /wd4005 /wd4250")
     endif()
 else()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
@@ -87,6 +87,8 @@ add_subdirectory(boost EXCLUDE_FROM_ALL)
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
 
 add_subdirectory(CatSyn)
+
+add_subdirectory(Metalloporphyrin)
 
 if(CAT_BUILD_TESTS)
     add_subdirectory(tests EXCLUDE_FROM_ALL)

@@ -92,38 +92,29 @@ void worker(Nucleus& nucl) noexcept {
             break;
         nucl.work_queue.consume_one([&](FrameInstance* inst) {
             std::unique_lock<std::mutex> lock(inst->processing_mutex, std::try_to_lock);
-            if (!lock.owns_lock())
+            if (!lock.owns_lock() || inst->product)
                 return;
-            try {
-                if (inst->product)
-                    goto early_exit;
-                std::vector<IFrame*> input_frames;
-                for (auto input : inst->inputs) {
+            std::vector<IFrame*> input_frames;
+            for (auto input : inst->inputs) {
 #ifndef NDEBUG
-                    if (!input->product)
-                        bug();
+                if (!input->product)
+                    bug();
 #endif
-                    input_frames.push_back(input->product.get());
-                }
-                cat_ptr<IFrame> product;
-                try {
-                    inst->substrate->filters[std::this_thread::get_id()]->process_frame(
-                        inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
-                        inst->inputs.size() - inst->false_dep, product.put());
-                } catch (...) {
-                    std::array<std::byte, MaintainTask::payload_size> pl{};
-                    *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
-                    post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
-                    goto early_exit;
-                }
-                inst->product = std::move(product);
-                post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
-            } catch (...) {
-                lock.unlock();
-                throw;
+                input_frames.push_back(input->product.get());
             }
-        early_exit:
-            lock.unlock();
+            cat_ptr<IFrame> product;
+            try {
+                inst->substrate->filters[std::this_thread::get_id()]->process_frame(
+                    inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
+                    inst->inputs.size() - inst->false_dep, product.put());
+            } catch (...) {
+                std::array<std::byte, MaintainTask::payload_size> pl{};
+                *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
+                post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
+                return;
+            }
+            inst->product = std::move(product);
+            post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
         });
     }
 }

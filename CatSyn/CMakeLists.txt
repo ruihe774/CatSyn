@@ -6,10 +6,6 @@ project(CatSyn
     DESCRIPTION "Catalyzed video processing framework"
 )
 
-if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /wd4250")
-endif()
-
 if(WIN32)
     add_library(Boost::stacktrace ALIAS boost_stacktrace_windbg)
 else()
