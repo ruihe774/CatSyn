@@ -21,10 +21,11 @@ void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
 FrameInstance::FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
     : substrate(substrate), frame_idx(frame_idx) {}
 
-MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v) noexcept {
+MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v, std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
     MaintainTask mtk;
     mtk.p = reinterpret_cast<uintptr_t>(p) | static_cast<uintptr_t>(t);
     mtk.v = v;
+    mtk.pl = pl;
     return mtk;
 }
 
@@ -38,6 +39,10 @@ void* MaintainTask::get_pointer() const noexcept {
 
 MaintainTask::Type MaintainTask::get_type() const noexcept {
     return static_cast<MaintainTask::Type>(p & 3);
+}
+
+std::array<std::byte, MaintainTask::payload_size> MaintainTask::get_payload() const noexcept {
+    return pl;
 }
 
 static void worker(Nucleus&) noexcept;
@@ -100,9 +105,16 @@ void worker(Nucleus& nucl) noexcept {
                     input_frames.push_back(input->product.get());
                 }
                 cat_ptr<IFrame> product;
-                inst->substrate->filters[std::this_thread::get_id()]->process_frame(
-                    inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
-                    inst->inputs.size(), product.put());
+                try {
+                    inst->substrate->filters[std::this_thread::get_id()]->process_frame(
+                        inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
+                        inst->inputs.size(), product.put());
+                } catch(...) {
+                    std::array<std::byte, MaintainTask::payload_size> pl;
+                    *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
+                    post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
+                    goto early_exit;
+                }
                 inst->product = std::move(product);
                 post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
             } catch (...) {
@@ -130,7 +142,7 @@ template<typename A, typename B> struct std::hash<std::pair<A, B>> {
 
 static FrameInstance*
 construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-          Substrate* substrate, size_t frame_idx) noexcept;
+          Substrate* substrate, size_t frame_idx, IOutput::Callback* callback = nullptr) noexcept;
 
 void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
@@ -143,15 +155,20 @@ void maintainer(Nucleus& nucl) noexcept {
             switch (task.get_type()) {
             case MaintainTask::Type::Notify: {
                 auto inst = static_cast<FrameInstance*>(task.get_pointer());
-                for (auto output : inst->outputs)
-                    if (check_all_inputs_ready(output))
-                        post_work(nucl, output);
+                auto exc = *reinterpret_cast<std::exception_ptr*>(task.get_payload().data());
+                if (!exc)
+                    for (auto output : inst->outputs)
+                        if (check_all_inputs_ready(output))
+                            post_work(nucl, output);
+                if (inst->callback)
+                    (*inst->callback)(inst->product.get(), exc);
                 break;
             }
             case MaintainTask::Type::Construct: {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
-                construct(nucl, instances, substrate, frame_idx);
+                auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
+                construct(nucl, instances, substrate, frame_idx, callback);
                 break;
             }
             }
@@ -183,7 +200,7 @@ void maintainer(Nucleus& nucl) noexcept {
 
 FrameInstance* construct(Nucleus& nucl,
                          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-                         Substrate* substrate, size_t frame_idx) noexcept {
+                         Substrate* substrate, size_t frame_idx, IOutput::Callback* callback) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end())
         return it->second.get();
@@ -204,6 +221,7 @@ FrameInstance* construct(Nucleus& nucl,
         instc->inputs.emplace_back(input);
         input->outputs.emplace_back(instc.get());
     }
+    instc->callback = std::unique_ptr<IOutput::Callback>(callback);
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
 
     if (check_all_inputs_ready(inst))
@@ -211,3 +229,14 @@ FrameInstance* construct(Nucleus& nucl,
 
     return inst;
 }
+
+class Output final : public Object, public IOutput, public Shuttle {
+  public:
+    cat_ptr<Substrate> substrate;
+
+    void get_frame(size_t frame_idx, Callback cb) noexcept final {
+        std::array<std::byte, MaintainTask::payload_size> pl;
+        *reinterpret_cast<Callback**>(pl.data()) = new Callback(std::move(cb));
+        post_maintain_task(nucl, MaintainTask::Type::Construct, substrate.get(), frame_idx, pl);
+    }
+};

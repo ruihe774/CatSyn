@@ -118,13 +118,19 @@ struct FrameInstance {
     std::vector<FrameInstance*> inputs;
     std::vector<FrameInstance*> outputs;
     std::mutex processing_mutex;
+    std::unique_ptr<IOutput::Callback> callback;
 
     FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
 };
 
 class MaintainTask {
+  public:
+    static constexpr size_t payload_size = sizeof(std::exception_ptr);
+
+  private:
     uintptr_t p;
     size_t v;
+    std::array<std::byte, payload_size> pl;
 
   public:
     enum class Type {
@@ -135,8 +141,9 @@ class MaintainTask {
     void* get_pointer() const noexcept;
     size_t get_value() const noexcept;
     Type get_type() const noexcept;
+    std::array<std::byte, payload_size> get_payload() const noexcept;
 
-    static MaintainTask create(Type, void*, size_t) noexcept;
+    static MaintainTask create(Type, void*, size_t, std::array<std::byte, payload_size> = {}) noexcept;
 };
 
 class Nucleus final : public Object, public INucleus, public IFactory {

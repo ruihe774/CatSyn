@@ -5,6 +5,7 @@
 #include <new>
 #include <utility>
 #include <typeinfo>
+#include <functional>
 
 #ifdef _WIN32
 #define CAT_EXPORT __declspec(dllexport)
@@ -122,6 +123,7 @@ class IRibosome;
 class IEnzyme;
 class ISubstrate;
 class IFilter;
+class IOutput;
 
 struct NucleusConfig {
     unsigned thread_count;
@@ -148,6 +150,8 @@ class INucleus : virtual public IRef {
 
     virtual void react() noexcept = 0;
     virtual bool is_reacting() const noexcept = 0;
+
+    virtual void create_output(ISubstrate* substrate, IOutput** output) noexcept;
 };
 
 class IFactory : virtual public IRef {
@@ -276,6 +280,12 @@ class IFilter : virtual public IObject {
     virtual VideoInfo get_video_info() const noexcept = 0;
     virtual const FrameSource* get_frame_dependency(size_t frame_idx, size_t* len) const noexcept = 0;
     virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources, size_t source_count, IFrame** out) = 0;
+};
+
+class IOutput : virtual public IRef {
+  public:
+    typedef std::function<void(IFrame* frame, std::exception_ptr exc)> Callback;
+    virtual void get_frame(size_t frame_idx, Callback cb) noexcept;
 };
 
 CAT_API void create_nucleus(INucleus** out);
