@@ -77,15 +77,15 @@ void Nucleus::create_number_array(SampleType sample_type, const void* data, size
     create_instance<NumberArray>(out, *this, sample_type, data, len);
 }
 
-void AllocStat::alloc(size_t size) noexcept {
+void Nucleus::AllocStat::alloc(size_t size) noexcept {
     current.fetch_add(size, std::memory_order_relaxed);
 }
 
-void AllocStat::free(size_t size) noexcept {
+void Nucleus::AllocStat::free(size_t size) noexcept {
     current.fetch_sub(size, std::memory_order_relaxed);
 }
 
-size_t AllocStat::get_current() const noexcept {
+size_t Nucleus::AllocStat::get_current() const noexcept {
     // precision is not important
     return current.load(std::memory_order_relaxed);
 }

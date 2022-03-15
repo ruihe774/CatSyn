@@ -1,9 +1,9 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <optional>
 #include <thread>
-#include <mutex>
 
 #ifdef _WIN32
 #include <Windows.h>
@@ -26,16 +26,6 @@ class Object : virtual public catsyn::IObject {
     void drop() noexcept final {
         delete this;
     }
-};
-
-class AllocStat {
-    std::atomic_size_t current{0};
-
-  public:
-    void alloc(size_t size) noexcept;
-    void free(size_t size) noexcept;
-
-    size_t get_current() const noexcept;
 };
 
 void write_err(const char* s, size_t n) noexcept;
@@ -114,7 +104,6 @@ class Table final : public Object, public ITable {
 
 class Substrate final : public Object, public ISubstrate {
   public:
-    const VideoInfo vi;
     boost::container::flat_map<std::thread::id, cat_ptr<IFilter>> filters;
 
     VideoInfo get_video_info() const noexcept final;
@@ -126,13 +115,11 @@ struct FrameInstance {
     const cat_ptr<Substrate> substrate;
     const size_t frame_idx;
     cat_ptr<IFrame> product;
-    const std::vector<FrameInstance*> inputs;
+    std::vector<FrameInstance*> inputs;
     std::vector<FrameInstance*> outputs;
     std::mutex processing_mutex;
 
-    FrameInstance(Substrate* substrate, size_t frame_idx,
-                  std::initializer_list<FrameInstance*> inputs,
-                  std::initializer_list<FrameInstance*> outputs) noexcept;
+    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
 };
 
 class MaintainTask {
@@ -143,7 +130,6 @@ class MaintainTask {
     enum class Type {
         Construct,
         Notify,
-        Collect,
     };
 
     void* get_pointer() const noexcept;
@@ -155,9 +141,21 @@ class MaintainTask {
 
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
-    NucleusConfig config{};
-    AllocStat alloc_stat;
+    class AllocStat {
+        std::atomic_size_t current{0};
+
+      public:
+        void alloc(size_t size) noexcept;
+        void free(size_t size) noexcept;
+
+        size_t get_current() const noexcept;
+
+        ~AllocStat();
+    };
+
     Logger logger;
+    AllocStat alloc_stat;
+    NucleusConfig config{};
 
     TableView<Table> finders{nullptr};
     TableView<Table> ribosomes{nullptr};
@@ -167,9 +165,9 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     std::vector<Thread> worker_threads;
     std::optional<Thread> maintainer_thread;
     Semaphore work_semaphore;
-    boost::lockfree::queue<FrameInstance*> work_queue;
+    boost::lockfree::queue<FrameInstance*> work_queue{128};
     Semaphore maintain_semaphore{0, 1};
-    boost::lockfree::queue<MaintainTask> maintain_queue;
+    boost::lockfree::queue<MaintainTask> maintain_queue{128};
 
     Nucleus();
     ~Nucleus() final;

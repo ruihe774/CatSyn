@@ -5,9 +5,7 @@
 #include <catimpl.h>
 
 NucleusConfig get_default_config() noexcept {
-    return NucleusConfig {
-        std::thread::hardware_concurrency(), 4096
-    };
+    return NucleusConfig{std::thread::hardware_concurrency(), 4096};
 }
 
 Nucleus::Nucleus() {
@@ -26,15 +24,10 @@ Nucleus::Nucleus() {
     enzymes = decltype(enzymes)(t.query<Table>());
 }
 
-Nucleus::~Nucleus() {
-    stop.store(true, std::memory_order_release);
-    for (auto&& t : worker_threads)
-        work_semaphore.release();
-    for (auto&& t : worker_threads)
-        t.join();
-    maintain_semaphore.release();
-    if (maintainer_thread)
-        maintainer_thread->join();
+Nucleus::AllocStat::~AllocStat() {
+    if (auto cur = get_current(); cur != 0)
+        // this is dirty
+        (reinterpret_cast<Logger*>(this) - 1)->log(LogLevel::WARNING, format_c("Nucleus: {}B memory not freed!", cur));
 }
 
 IFactory* Nucleus::get_factory() noexcept {
