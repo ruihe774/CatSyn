@@ -5,3 +5,4 @@ PointerAlignment: Left
 AllowShortFunctionsOnASingleLine: Empty
 ColumnLimit: 120
 SpaceAfterTemplateKeyword: false
+AllowShortEnumsOnASingleLine: false

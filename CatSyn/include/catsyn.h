@@ -2,10 +2,10 @@
 
 #include <array>
 #include <atomic>
-#include <new>
-#include <utility>
-#include <typeinfo>
 #include <functional>
+#include <new>
+#include <typeinfo>
+#include <utility>
 
 #ifdef _WIN32
 #define CAT_EXPORT __declspec(dllexport)
@@ -217,7 +217,11 @@ class IFrame : virtual public IObject {
     virtual void set_frame_props(const ITable* props) noexcept = 0;
 };
 
-enum class LogLevel { DEBUG = 10, INFO = 20, WARNING = 30 };
+enum class LogLevel {
+    DEBUG = 10,
+    INFO = 20,
+    WARNING = 30
+};
 
 class ILogSink : virtual public IObject {
   public:
@@ -275,16 +279,15 @@ struct FrameSource {
     size_t frame_idx;
 };
 
-enum FilterFlags {
-    ffMakeLinear = 4
-};
+enum FilterFlags { ffMakeLinear = 4 };
 
 class IFilter : virtual public IObject {
   public:
     virtual FilterFlags get_filter_flags() const noexcept = 0;
     virtual VideoInfo get_video_info() const noexcept = 0;
     virtual const FrameSource* get_frame_dependency(size_t frame_idx, size_t* len) const noexcept = 0;
-    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources, size_t source_count, IFrame** out) = 0;
+    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources,
+                               size_t source_count, IFrame** out) = 0;
 };
 
 class IOutput : virtual public IRef {
