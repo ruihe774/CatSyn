@@ -208,6 +208,8 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     void react() noexcept final;
     bool is_reacting() const noexcept final;
+
+    void create_output(ISubstrate* substrate, IOutput** output) noexcept final;
 };
 
 class Shuttle {

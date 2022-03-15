@@ -21,7 +21,8 @@ void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
 FrameInstance::FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
     : substrate(substrate), frame_idx(frame_idx) {}
 
-MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v, std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
+MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v,
+                                  std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
     MaintainTask mtk;
     mtk.p = reinterpret_cast<uintptr_t>(p) | static_cast<uintptr_t>(t);
     mtk.v = v;
@@ -61,7 +62,7 @@ bool Nucleus::is_reacting() const noexcept {
 
 Nucleus::~Nucleus() {
     stop.store(true, std::memory_order_release);
-    for (auto&& t : worker_threads)
+    for (auto&& _ : worker_threads)
         work_semaphore.release();
     for (auto&& t : worker_threads)
         t.join();
@@ -70,7 +71,7 @@ Nucleus::~Nucleus() {
         maintainer_thread->join();
 }
 
-[[noreturn]] static void bug() {
+[[noreturn, maybe_unused]] static void bug() {
     throw std::logic_error("bug!");
 }
 
@@ -109,7 +110,7 @@ void worker(Nucleus& nucl) noexcept {
                     inst->substrate->filters[std::this_thread::get_id()]->process_frame(
                         inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
                         inst->inputs.size(), product.put());
-                } catch(...) {
+                } catch (...) {
                     std::array<std::byte, MaintainTask::payload_size> pl;
                     *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
                     post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
@@ -190,10 +191,9 @@ void maintainer(Nucleus& nucl) noexcept {
                 next:;
                 }
                 auto after = nucl.alloc_stat.get_current();
-                nucl.logger.log(
-                    LogLevel::DEBUG,
-                    format_c("Nucleus: lysosome triggered ({} frames collected; before: {}MB, after: {}MB)",
-                             destroy_count, before >> 20, after >> 20));
+                nucl.logger.log(LogLevel::DEBUG,
+                                format_c("Nucleus: lysosome triggered ({} frames collected; before: {}MB, after: {}MB)",
+                                         destroy_count, before >> 20, after >> 20));
             }
     }
 }
@@ -239,4 +239,11 @@ class Output final : public Object, public IOutput, public Shuttle {
         *reinterpret_cast<Callback**>(pl.data()) = new Callback(std::move(cb));
         post_maintain_task(nucl, MaintainTask::Type::Construct, substrate.get(), frame_idx, pl);
     }
+
+    explicit Output(Nucleus& nucl, ISubstrate* substrate) noexcept
+        : Shuttle(nucl), substrate(&dynamic_cast<Substrate&>(*substrate)) {}
 };
+
+void Nucleus::create_output(ISubstrate* substrate, IOutput** output) noexcept {
+    create_instance<Output>(output, *this, substrate);
+}

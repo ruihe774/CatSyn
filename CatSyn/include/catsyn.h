@@ -151,7 +151,7 @@ class INucleus : virtual public IRef {
     virtual void react() noexcept = 0;
     virtual bool is_reacting() const noexcept = 0;
 
-    virtual void create_output(ISubstrate* substrate, IOutput** output) noexcept;
+    virtual void create_output(ISubstrate* substrate, IOutput** output) noexcept = 0;
 };
 
 class IFactory : virtual public IRef {
@@ -285,7 +285,7 @@ class IFilter : virtual public IObject {
 class IOutput : virtual public IRef {
   public:
     typedef std::function<void(IFrame* frame, std::exception_ptr exc)> Callback;
-    virtual void get_frame(size_t frame_idx, Callback cb) noexcept;
+    virtual void get_frame(size_t frame_idx, Callback cb) noexcept = 0;
 };
 
 CAT_API void create_nucleus(INucleus** out);
