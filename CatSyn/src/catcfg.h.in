@@ -1,0 +1,11 @@
+#pragma once
+
+#include <catsyn.h>
+
+constexpr catsyn::Version version {
+    @PROJECT_VERSION_MINOR@,
+    @PROJECT_VERSION_PATCH@,
+    0x@SHORT_COMMIT_HASH@,
+};
+
+constexpr const char* description = "@PROJECT_DESCRIPTION@";

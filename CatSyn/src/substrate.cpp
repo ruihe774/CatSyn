@@ -1,3 +1,4 @@
+#include <mutex>
 #include <unordered_map>
 
 #include <boost/functional/hash.hpp>
@@ -14,7 +15,8 @@ struct FrameInstance {
     std::unique_ptr<IOutput::Callback> callback;
     bool false_dep;
 
-    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
+    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
+        : substrate(substrate), frame_idx(frame_idx), false_dep(false) {}
 };
 
 static std::thread::id position_zero;
@@ -30,9 +32,6 @@ VideoInfo Substrate::get_video_info() const noexcept {
 void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
     create_instance<Substrate>(out, wrap_cat_ptr(in));
 }
-
-FrameInstance::FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
-    : substrate(substrate), frame_idx(frame_idx), false_dep(false) {}
 
 MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v,
                                   std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
@@ -78,9 +77,9 @@ Nucleus::~Nucleus() {
     stop.store(true, std::memory_order_release);
     for (auto&& _ : worker_threads)
         work_semaphore.release();
+    maintain_semaphore.release();
     for (auto&& t : worker_threads)
         t.join();
-    maintain_semaphore.release();
     if (maintainer_thread)
         maintainer_thread->join();
 }

@@ -1,13 +1,8 @@
-#include <algorithm>
-
-#include <stdio.h>
 #include <string.h>
 
 #include <catimpl.h>
 
 #ifdef _WIN32
-
-#include <Windows.h>
 
 [[noreturn]] void throw_system_error() {
     throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
@@ -56,7 +51,7 @@ void set_thread_priority(std::thread& thread, int priority, bool allow_boost) no
 #include <errno.h>
 #include <unistd.h>
 
-[[noreturn]] static void throw_system_error() {
+[[noreturn]] void throw_system_error() {
     throw std::system_error(errno, std::system_category());
 }
 
@@ -100,9 +95,8 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
         clear = "";
     }
 
-    char buf[1024];
-    write_err(buf, std::min(sizeof(buf) - 1, static_cast<size_t>(snprintf(buf, sizeof(buf), "%s%s%s\t%s\n", color,
-                                                                          prompt, clear, msg))));
+    char buf[4096];
+    write_err(buf, fmt::format_to_n(buf, sizeof(buf), "{}{}{}\t{}\n", color, prompt, clear, msg).out - buf);
 }
 
 static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue, Semaphore& semaphore,

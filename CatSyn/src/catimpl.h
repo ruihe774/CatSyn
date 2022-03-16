@@ -2,30 +2,30 @@
 
 #include <array>
 #include <atomic>
-#include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <thread>
+#include <vector>
 
+#include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
+#include <boost/lockfree/queue.hpp>
+
+#include <fmt/format.h>
 
 #ifdef _WIN32
 #include <Windows.h>
 #endif
 
-#include <boost/container/flat_map.hpp>
-#include <boost/lockfree/queue.hpp>
-
-#include <fmt/format.h>
-
 #define CAT_IMPL
 
+#include <catcfg.h>
 #include <cathelper.h>
 #include <catsyn.h>
-#include <catcfg.h>
 
 using namespace catsyn;
 
-class Object : virtual public catsyn::IObject {
+class Object : virtual public IObject {
   private:
     void drop() noexcept final {
         delete this;
@@ -88,7 +88,8 @@ class Logger final : public Object, public ILogger {
 };
 
 class Table final : public Object, public ITable {
-    typedef boost::container::small_vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>, 16> vector_type;
+    typedef boost::container::small_vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>, 16>
+        vector_type;
     vector_type vec;
 
     size_t norm_ref(size_t ref) const noexcept;
@@ -241,7 +242,7 @@ template<typename... Args> const char* format_c(fmt::format_string<Args...> fmt,
 
 template<typename T, typename Char>
 struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception, T>>> : fmt::formatter<const char*> {
-    template<typename FormatContext> auto format(const std::exception& exc, FormatContext& ctx) {
+    template<typename FormatContext> constexpr auto format(const std::exception& exc, FormatContext& ctx) const {
         return fmt::formatter<const char*>::format(exc.what(), ctx);
     }
 };

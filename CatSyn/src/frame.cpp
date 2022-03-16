@@ -1,7 +1,4 @@
-#include <array>
 #include <cstddef>
-#include <memory>
-#include <stdexcept>
 
 #include <string.h>
 
@@ -60,7 +57,7 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
 
 class NumberArray final : public Bytes, public INumberArray {
   public:
-    NumberArray(Nucleus& nucl, SampleType sample_type, const void* data, size_t len): Bytes(nucl, data, len) {
+    NumberArray(Nucleus& nucl, SampleType sample_type, const void* data, size_t len) noexcept : Bytes(nucl, data, len) {
         this->sample_type = sample_type;
     }
 };

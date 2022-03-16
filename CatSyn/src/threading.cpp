@@ -1,5 +1,3 @@
-#include <exception>
-
 #include <boost/stacktrace/stacktrace.hpp>
 
 #include <catimpl.h>
@@ -40,10 +38,13 @@ struct cxx_exception_type {
 };
 
 static const char* what(const EXCEPTION_RECORD* rec, const char** type_name) {
-    if (rec->ExceptionCode != 0xe06d7363) return NULL;
-    if (rec->NumberParameters != 4) return NULL;
+    if (rec->ExceptionCode != 0xe06d7363)
+        return NULL;
+    if (rec->NumberParameters != 4)
+        return NULL;
     UINT_PTR magic = rec->ExceptionInformation[0];
-    if (magic < 0x19930520 || magic > 0x19930522) return NULL;
+    if (magic < 0x19930520 || magic > 0x19930522)
+        return NULL;
     ULONG_PTR objptr = rec->ExceptionInformation[1];
     struct cxx_exception_type* info = (struct cxx_exception_type*)rec->ExceptionInformation[2];
     ULONG_PTR base = rec->ExceptionInformation[3];

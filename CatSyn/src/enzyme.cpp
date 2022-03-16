@@ -2,8 +2,6 @@
 #include <map>
 #include <string_view>
 
-#include <Windows.h>
-
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/dll.hpp>
 
@@ -38,8 +36,8 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
     }
 
   public:
-    DllEnzymeFinder(Nucleus& nucl, std::filesystem::path path) : Shuttle(nucl), path(std::move(path)) {}
-    DllEnzymeFinder(Nucleus& nucl, const char* path) : Shuttle(nucl), path(normalize(path)) {}
+    DllEnzymeFinder(Nucleus& nucl, std::filesystem::path path) noexcept : Shuttle(nucl), path(std::move(path)) {}
+    DllEnzymeFinder(Nucleus& nucl, const char* path) noexcept : Shuttle(nucl), path(normalize(path)) {}
 
     const char* const* find(size_t* len) noexcept final {
         if (!tokens_c_str) {
@@ -111,14 +109,14 @@ class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
         }
     }
 
-    explicit CatSynV1Ribosome(Nucleus& nucl) : Shuttle(nucl) {}
+    explicit CatSynV1Ribosome(Nucleus& nucl) noexcept : Shuttle(nucl) {}
 };
 
 void Nucleus::create_catsyn_v1_ribosome(IRibosome** out) noexcept {
     create_instance<CatSynV1Ribosome>(out, *this);
 }
 
-template<typename T> void dedup(std::vector<T>& vec) {
+template<typename T> static void dedup(std::vector<T>& vec) noexcept {
     std::vector<size_t> idx;
     idx.reserve(vec.size());
     for (size_t i = 0; i < vec.size(); ++i)
@@ -133,7 +131,7 @@ template<typename T> void dedup(std::vector<T>& vec) {
     vec = std::move(new_vec);
 }
 
-[[noreturn]] void not_enzyme_nor_ribosome() {
+[[noreturn]] static void not_enzyme_nor_ribosome() {
     throw std::runtime_error("the synthesized product is not enzyme nor ribosome");
 }
 
@@ -143,7 +141,8 @@ void Nucleus::synthesize_enzymes() noexcept {
     std::vector<std::string_view> tokens;
     for (size_t ref = 0; ref < finders.size(); ++ref) {
         auto finder = finders.get<IEnzymeFinder>(ref);
-        if (!finder) continue;
+        if (!finder)
+            continue;
         size_t size;
         auto p = finder.clone()->find(&size);
         tokens.reserve(tokens.size() + size);
@@ -157,7 +156,8 @@ void Nucleus::synthesize_enzymes() noexcept {
         auto token = token_sv.data();
         for (size_t ref = 0; ref < ribosomes.size(); ++ref) {
             auto ribosome = ribosomes.get<IRibosome>(ref);
-            if (!ribosome) continue;
+            if (!ribosome)
+                continue;
             cat_ptr<IObject> obj;
             ribosome.clone()->synthesize_enzyme(token, obj.put());
             if (obj) {

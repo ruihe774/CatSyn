@@ -1,5 +1,4 @@
 #include <string_view>
-#include <vector>
 
 #include <catimpl.h>
 

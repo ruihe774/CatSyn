@@ -1,5 +1,3 @@
-#include <stdexcept>
-
 #include <mimalloc.h>
 
 #include <catimpl.h>
@@ -69,11 +67,11 @@ NucleusConfig Nucleus::get_config() const noexcept {
     return config;
 }
 
-Version get_version() noexcept {
+CAT_API Version catsyn::get_version() noexcept {
     return version;
 }
 
-const char* get_version_string() noexcept {
+CAT_API const char* catsyn::get_version_string() noexcept {
     static struct VersionString {
         char buf[128];
         VersionString() {
