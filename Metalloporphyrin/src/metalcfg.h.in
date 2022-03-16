@@ -1,0 +1,6 @@
+#pragma once
+
+constexpr const char* version_string = "@PROJECT_VERSION@-@SHORT_COMMIT_HASH@";
+constexpr const char* description = "@PROJECT_DESCRIPTION@";
+constexpr const char* copyright = "Copyright (c) 2022 Misaki Kasumi";
+constexpr int vs_core_version = 54;

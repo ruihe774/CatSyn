@@ -1,3 +1,5 @@
+#include <system_error>
+
 #include <string.h>
 
 #include <catimpl.h>
