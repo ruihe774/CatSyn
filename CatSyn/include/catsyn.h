@@ -76,6 +76,7 @@ class ITable : virtual public IObject {
     virtual void set_key(size_t ref, const char* key) noexcept = 0;
 
     virtual size_t size() const noexcept = 0;
+    virtual void resize(size_t len) noexcept = 0;
 };
 
 class IBytes : virtual public IObject {

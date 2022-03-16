@@ -96,6 +96,7 @@ class Table final : public Object, public ITable {
     explicit Table(vector_type vec) noexcept;
     explicit Table(size_t reserve_capacity) noexcept;
     size_t size() const noexcept final;
+    void resize(size_t len) noexcept final;
     const IObject* get(size_t ref) const noexcept final;
     void set(size_t ref, const IObject* obj) noexcept final;
     size_t get_ref(const char* key) const noexcept final;

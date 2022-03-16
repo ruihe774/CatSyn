@@ -91,7 +91,7 @@ static VSCore* createCore(int threads) noexcept {
     return pcore;
 }
 
-static void invalid_core_pointer() {
+[[noreturn]] static void invalid_core_pointer() {
     throw std::runtime_error("invalid VSCore pointer");
 }
 
@@ -361,4 +361,189 @@ static int getFrameHeight(const VSFrameRef* f, int plane) noexcept {
 static void copyFrameProps(const VSFrameRef* src, VSFrameRef* dst, VSCore*) noexcept {
     catsyn::cat_ptr<const catsyn::ITable> props = src->frame->get_frame_props();
     dst->frame->set_frame_props(props.clone().get());
+}
+struct VSMap {
+    catsyn::TableView<const catsyn::ITable> table;
+    bool mut;
+
+    explicit VSMap(catsyn::ITable* table) noexcept : table(table), mut(true) {}
+    explicit VSMap(const catsyn::ITable* table) noexcept : table(table), mut(false) {}
+
+    catsyn::TableView<catsyn::ITable>& get_mut() {
+        if (!mut)
+            throw std::runtime_error("attempt to modify an immutable table");
+        return reinterpret_cast<catsyn::TableView<catsyn::ITable>&>(table);
+    }
+};
+
+static const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept {
+    return new VSMap(f->frame->get_frame_props());
+}
+
+static VSMap* getFramePropsRW(VSFrameRef* f) noexcept {
+    return new VSMap(f->frame->get_frame_props_mut());
+}
+
+[[noreturn]] static void no_core() {
+    throw std::runtime_error("no core");
+}
+
+static VSMap *createMap() noexcept {
+    std::shared_lock<std::shared_mutex> lock(cores_mutex);
+    if (cores.empty())
+        no_core();
+    else {
+        catsyn::cat_ptr<catsyn::ITable> table;
+        cores.front()->nucl->get_factory()->create_table(0, table.put());
+        return new VSMap(table.get());
+    }
+}
+
+static void freeMap(VSMap *map) noexcept {
+    delete map;
+}
+
+static void clearMap(VSMap *map) noexcept {
+    map->get_mut().table->resize(0);
+}
+
+static void setError(VSMap *map, const char *errorMessage) noexcept {
+    std::shared_lock<std::shared_mutex> lock(cores_mutex);
+    if (cores.empty())
+        no_core();
+    else {
+        catsyn::cat_ptr<catsyn::IBytes> bytes;
+        cores.front()->nucl->get_factory()->create_bytes(errorMessage, strlen(errorMessage) + 1, bytes.put());
+        map->get_mut().set("__error", bytes.get());
+    }
+}
+
+static const char *getError(const VSMap *map) noexcept {
+    return static_cast<const char *>(map->table.get<catsyn::IBytes>("__error")->data());
+}
+
+static int propNumKeys(const VSMap *map) noexcept {
+    return static_cast<int>(map->table.size());
+}
+
+static const char *propGetKey(const VSMap *map, int index) noexcept {
+    return map->table.table->get_key(index);
+}
+
+static int propDeleteKey(VSMap *map, const char *key) noexcept {
+    map->get_mut().del(key);
+}
+
+static char propGetType(const VSMap *map, const char *key) noexcept {
+    auto val = map->table.get<catsyn::IObject>(key);
+    if (auto p = val.try_query<const catsyn::INumberArray>(); p) {
+        if (p->sample_type == catsyn::SampleType::Integer)
+            return ptInt;
+        else
+            return ptFloat;
+    }
+    if (val.try_query<const catsyn::IBytes>())
+        return ptData;
+    if (val.try_query<const catsyn::ISubstrate>())
+        return ptNode;
+    if (val.try_query<const catsyn::IFunction>())
+        return ptFunction;
+    return ptUnset;
+}
+
+static int propNumElements(const VSMap *map, const char *key) noexcept {
+    auto val = map->table.get<catsyn::IObject>(key);
+    if (!val)
+        return -1;
+    if (auto arr = val.try_query<const catsyn::INumberArray>(); arr)
+        return arr->size() / 8;
+    else
+        return 1;
+}
+
+static const catsyn::INumberArray* propGetIntArrayImpl(const VSMap *map, const char *key, int *error) noexcept {
+    auto val = map->table.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto arr = val.try_query<const catsyn::INumberArray>();
+    if (!arr || arr->sample_type != catsyn::SampleType::Integer) {
+        *error = peType;
+        return nullptr;
+    }
+    return arr.get();
+}
+
+static const int64_t *propGetIntArray(const VSMap *map, const char *key, int *error) noexcept {
+    auto arr = propGetIntArrayImpl(map, key, error);
+    return arr ? static_cast<const int64_t *>(arr->data()) : nullptr;
+}
+
+static const catsyn::INumberArray* propGetFloatArrayImpl(const VSMap *map, const char *key, int *error) noexcept {
+    auto val = map->table.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto arr = val.try_query<const catsyn::INumberArray>();
+    if (!arr || arr->sample_type != catsyn::SampleType::Float) {
+        *error = peType;
+        return nullptr;
+    }
+    return arr.get();
+}
+
+static const double* propGetFloatArray(const VSMap *map, const char *key, int *error) noexcept {
+    auto arr = propGetFloatArrayImpl(map, key, error);
+    return arr ? static_cast<const double*>(arr->data()) : nullptr;
+}
+
+static int64_t propGetInt(const VSMap *map, const char *key, int index, int *error) noexcept {
+    auto arr = propGetIntArrayImpl(map, key, error);
+    if (!arr)
+        return 0;
+    if (index >= arr->size() / 8) {
+        *error = peIndex;
+        return 0;
+    }
+    return static_cast<const int64_t*>(arr->data())[index];
+}
+
+static double propGetFloat(const VSMap *map, const char *key, int index, int *error) noexcept {
+    auto arr = propGetFloatArrayImpl(map, key, error);
+    if (!arr)
+        return 0;
+    if (index >= arr->size() / 8) {
+        *error = peIndex;
+        return 0;
+    }
+    return static_cast<const double*>(arr->data())[index];
+}
+
+static const catsyn::IBytes *propGetDataImpl(const VSMap *map, const char *key, int index, int *error) noexcept {
+    if (index) {
+        *error = peIndex;
+        return nullptr;
+    }
+    auto val = map->table.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto data = val.try_query<const catsyn::IBytes>();
+    if (!data) {
+        *error = peType;
+        return nullptr;
+    }
+    return data.get();
+}
+
+static const char *propGetData(const VSMap *map, const char *key, int index, int *error) noexcept {
+    auto data = propGetDataImpl(map, key, index, error);
+    return data ? static_cast<const char*>(data->data()) : nullptr;
+}
+
+static int propGetDataSize(const VSMap *map, const char *key, int index, int *error) noexcept {
+    return static_cast<int>(propGetDataImpl(map, key, index, error)->size() - 1);
 }

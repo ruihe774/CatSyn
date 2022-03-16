@@ -24,6 +24,10 @@ size_t Table::size() const noexcept {
     return vec.size();
 }
 
+void Table::resize(size_t len) noexcept {
+    vec.resize(len);
+}
+
 const IObject* Table::get(size_t ref) const noexcept {
     ref = norm_ref(ref);
     if (ref >= size())
