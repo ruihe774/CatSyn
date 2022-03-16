@@ -18,11 +18,14 @@ class Object : virtual public catsyn::IObject {
     }
 };
 
+static std::vector<std::unique_ptr<VSCore>> cores;
+static std::shared_mutex cores_mutex;
+
 static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) {
     switch (level) {
     case catsyn::LogLevel::DEBUG:
-        return mtDebug;
     case catsyn::LogLevel::INFO:
+        return mtDebug;
     case catsyn::LogLevel::WARNING:
         return mtWarning;
     default:
@@ -46,15 +49,13 @@ struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
 
     void send_log(catsyn::LogLevel level, const char* msg) noexcept final {
         auto mt = loglevel_to_msgtype(level);
+        std::shared_lock<std::shared_mutex> lock(cores_mutex);
         for (const auto& handler : handlers)
             handler.handler(mt, msg, handler.userData);
     }
 };
 
 static UserLogSink sink;
-
-static std::vector<std::unique_ptr<VSCore>> cores;
-static std::shared_mutex cores_mutex;
 
 struct VSCore {
     catsyn::cat_ptr<catsyn::INucleus> nucl;
