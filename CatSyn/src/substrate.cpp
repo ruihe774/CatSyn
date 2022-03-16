@@ -75,7 +75,7 @@ bool Nucleus::is_reacting() const noexcept {
 
 Nucleus::~Nucleus() {
     stop.store(true, std::memory_order_release);
-    for (auto&& _ : worker_threads)
+    for (auto&& t [[maybe_unused]] : worker_threads)
         work_semaphore.release();
     maintain_semaphore.release();
     for (auto&& t : worker_threads)
