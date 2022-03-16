@@ -43,6 +43,8 @@ void Table::set(size_t ref, const IObject* obj) noexcept {
 }
 
 size_t Table::get_ref(const char* key) const noexcept {
+    if (!key)
+        return npos;
     std::string_view keysv{key};
     for (size_t i = 0; i < size(); ++i)
         if (const auto& item_key = vec[i].first; item_key && item_key.value() == keysv)

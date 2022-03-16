@@ -405,10 +405,12 @@ template<typename T> class TableView<T, false> : public TableView<T, true> {
         if (ref == ITable::npos)
             return nullptr;
         auto p = this->table->get(ref);
+        if (!p)
+            return nullptr;
         if (p->is_unique())
-            return make_cat_ptr(const_cast<IObject*>(p)).template query<U>();
+            return wrap_cat_ptr(const_cast<IObject*>(p)).template query<U>();
         else {
-            auto new_p = make_cat_ptr(p).template query<const U>().clone();
+            auto new_p = wrap_cat_ptr(p).template query<const U>().clone();
             this->table->set(ref, new_p.get());
             return new_p;
         }

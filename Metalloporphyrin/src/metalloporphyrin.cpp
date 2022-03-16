@@ -388,7 +388,7 @@ static VSMap* getFramePropsRW(VSFrameRef* f) noexcept {
     throw std::runtime_error("no core");
 }
 
-static VSMap *createMap() noexcept {
+static VSMap* createMap() noexcept {
     std::shared_lock<std::shared_mutex> lock(cores_mutex);
     if (cores.empty())
         no_core();
@@ -399,15 +399,15 @@ static VSMap *createMap() noexcept {
     }
 }
 
-static void freeMap(VSMap *map) noexcept {
+static void freeMap(VSMap* map) noexcept {
     delete map;
 }
 
-static void clearMap(VSMap *map) noexcept {
+static void clearMap(VSMap* map) noexcept {
     map->get_mut().table->resize(0);
 }
 
-static void setError(VSMap *map, const char *errorMessage) noexcept {
+static void setError(VSMap* map, const char* errorMessage) noexcept {
     std::shared_lock<std::shared_mutex> lock(cores_mutex);
     if (cores.empty())
         no_core();
@@ -418,23 +418,23 @@ static void setError(VSMap *map, const char *errorMessage) noexcept {
     }
 }
 
-static const char *getError(const VSMap *map) noexcept {
-    return static_cast<const char *>(map->table.get<catsyn::IBytes>("__error")->data());
+static const char* getError(const VSMap* map) noexcept {
+    return static_cast<const char*>(map->table.get<catsyn::IBytes>("__error")->data());
 }
 
-static int propNumKeys(const VSMap *map) noexcept {
+static int propNumKeys(const VSMap* map) noexcept {
     return static_cast<int>(map->table.size());
 }
 
-static const char *propGetKey(const VSMap *map, int index) noexcept {
+static const char* propGetKey(const VSMap* map, int index) noexcept {
     return map->table.table->get_key(index);
 }
 
-static int propDeleteKey(VSMap *map, const char *key) noexcept {
+static int propDeleteKey(VSMap* map, const char* key) noexcept {
     map->get_mut().del(key);
 }
 
-static char propGetType(const VSMap *map, const char *key) noexcept {
+static char propGetType(const VSMap* map, const char* key) noexcept {
     auto val = map->table.get<catsyn::IObject>(key);
     if (auto p = val.try_query<const catsyn::INumberArray>(); p) {
         if (p->sample_type == catsyn::SampleType::Integer)
@@ -451,7 +451,7 @@ static char propGetType(const VSMap *map, const char *key) noexcept {
     return ptUnset;
 }
 
-static int propNumElements(const VSMap *map, const char *key) noexcept {
+static int propNumElements(const VSMap* map, const char* key) noexcept {
     auto val = map->table.get<catsyn::IObject>(key);
     if (!val)
         return -1;
@@ -461,7 +461,7 @@ static int propNumElements(const VSMap *map, const char *key) noexcept {
         return 1;
 }
 
-static const catsyn::INumberArray* propGetIntArrayImpl(const VSMap *map, const char *key, int *error) noexcept {
+static const catsyn::INumberArray* propGetIntArrayImpl(const VSMap* map, const char* key, int* error) noexcept {
     auto val = map->table.get<catsyn::IObject>(key);
     if (!val) {
         *error = peUnset;
@@ -475,12 +475,12 @@ static const catsyn::INumberArray* propGetIntArrayImpl(const VSMap *map, const c
     return arr.get();
 }
 
-static const int64_t *propGetIntArray(const VSMap *map, const char *key, int *error) noexcept {
+static const int64_t* propGetIntArray(const VSMap* map, const char* key, int* error) noexcept {
     auto arr = propGetIntArrayImpl(map, key, error);
-    return arr ? static_cast<const int64_t *>(arr->data()) : nullptr;
+    return arr ? static_cast<const int64_t*>(arr->data()) : nullptr;
 }
 
-static const catsyn::INumberArray* propGetFloatArrayImpl(const VSMap *map, const char *key, int *error) noexcept {
+static const catsyn::INumberArray* propGetFloatArrayImpl(const VSMap* map, const char* key, int* error) noexcept {
     auto val = map->table.get<catsyn::IObject>(key);
     if (!val) {
         *error = peUnset;
@@ -494,12 +494,12 @@ static const catsyn::INumberArray* propGetFloatArrayImpl(const VSMap *map, const
     return arr.get();
 }
 
-static const double* propGetFloatArray(const VSMap *map, const char *key, int *error) noexcept {
+static const double* propGetFloatArray(const VSMap* map, const char* key, int* error) noexcept {
     auto arr = propGetFloatArrayImpl(map, key, error);
     return arr ? static_cast<const double*>(arr->data()) : nullptr;
 }
 
-static int64_t propGetInt(const VSMap *map, const char *key, int index, int *error) noexcept {
+static int64_t propGetInt(const VSMap* map, const char* key, int index, int* error) noexcept {
     auto arr = propGetIntArrayImpl(map, key, error);
     if (!arr)
         return 0;
@@ -510,7 +510,7 @@ static int64_t propGetInt(const VSMap *map, const char *key, int index, int *err
     return static_cast<const int64_t*>(arr->data())[index];
 }
 
-static double propGetFloat(const VSMap *map, const char *key, int index, int *error) noexcept {
+static double propGetFloat(const VSMap* map, const char* key, int index, int* error) noexcept {
     auto arr = propGetFloatArrayImpl(map, key, error);
     if (!arr)
         return 0;
@@ -521,7 +521,7 @@ static double propGetFloat(const VSMap *map, const char *key, int index, int *er
     return static_cast<const double*>(arr->data())[index];
 }
 
-static const catsyn::IBytes *propGetDataImpl(const VSMap *map, const char *key, int index, int *error) noexcept {
+static const catsyn::IBytes* propGetDataImpl(const VSMap* map, const char* key, int index, int* error) noexcept {
     if (index) {
         *error = peIndex;
         return nullptr;
@@ -539,11 +539,108 @@ static const catsyn::IBytes *propGetDataImpl(const VSMap *map, const char *key, 
     return data.get();
 }
 
-static const char *propGetData(const VSMap *map, const char *key, int index, int *error) noexcept {
+static const char* propGetData(const VSMap* map, const char* key, int index, int* error) noexcept {
     auto data = propGetDataImpl(map, key, index, error);
     return data ? static_cast<const char*>(data->data()) : nullptr;
 }
 
-static int propGetDataSize(const VSMap *map, const char *key, int index, int *error) noexcept {
+static int propGetDataSize(const VSMap* map, const char* key, int index, int* error) noexcept {
     return static_cast<int>(propGetDataImpl(map, key, index, error)->size() - 1);
+}
+
+static int propSetInt(VSMap* map, const char* key, int64_t i, int append) noexcept {
+    auto table = map->get_mut();
+    catsyn::cat_ptr<catsyn::INumberArray> arr;
+    try {
+        if (append == paTouch && table.get<catsyn::INumberArray>(key))
+            return 0;
+        arr = table.modify<catsyn::INumberArray>(key);
+    } catch (std::bad_cast&) {
+        return 1;
+    }
+    if (!arr) {
+        std::shared_lock<std::shared_mutex> lock(cores_mutex);
+        cores.front()->nucl->get_factory()->create_number_array(catsyn::SampleType::Integer, nullptr, 0, arr.put());
+        table.set(key, arr.get());
+    }
+    if (arr->sample_type != catsyn::SampleType::Integer)
+        return 1;
+    if (append == paReplace) {
+        arr->realloc(8);
+        static_cast<int64_t*>(arr->data())[0] = i;
+    } else if (append == paAppend) {
+        auto size = arr->size();
+        arr->realloc(size + 8);
+        static_cast<int64_t*>(arr->data())[size / 8] = i;
+    }
+    return 0;
+}
+
+static int propSetIntArray(VSMap* map, const char* key, const int64_t* i, int size) noexcept {
+    if (size < 0)
+        return 1;
+    std::shared_lock<std::shared_mutex> lock(cores_mutex);
+    catsyn::cat_ptr<catsyn::INumberArray> arr;
+    cores.front()->nucl->get_factory()->create_number_array(catsyn::SampleType::Integer, i, size * 8, arr.put());
+    map->get_mut().set(key, arr.get());
+    return 0;
+}
+
+static int propSetFloat(VSMap* map, const char* key, double i, int append) noexcept {
+    auto table = map->get_mut();
+    catsyn::cat_ptr<catsyn::INumberArray> arr;
+    try {
+        if (append == paTouch && table.get<catsyn::INumberArray>(key))
+            return 0;
+        arr = table.modify<catsyn::INumberArray>(key);
+    } catch (std::bad_cast&) {
+        return 1;
+    }
+    if (!arr) {
+        std::shared_lock<std::shared_mutex> lock(cores_mutex);
+        cores.front()->nucl->get_factory()->create_number_array(catsyn::SampleType::Float, nullptr, 0, arr.put());
+        table.set(key, arr.get());
+    }
+    if (arr->sample_type != catsyn::SampleType::Float)
+        return 1;
+    if (append == paReplace) {
+        arr->realloc(8);
+        static_cast<double*>(arr->data())[0] = i;
+    } else if (append == paAppend) {
+        auto size = arr->size();
+        arr->realloc(size + 8);
+        static_cast<double*>(arr->data())[size / 8] = i;
+    }
+    return 0;
+}
+
+static int propSetFloatArray(VSMap* map, const char* key, const double* i, int size) noexcept {
+    if (size < 0)
+        return 1;
+    std::shared_lock<std::shared_mutex> lock(cores_mutex);
+    catsyn::cat_ptr<catsyn::INumberArray> arr;
+    cores.front()->nucl->get_factory()->create_number_array(catsyn::SampleType::Float, i, size * 8, arr.put());
+    map->get_mut().set(key, arr.get());
+    return 0;
+}
+
+static int propSetData(VSMap* map, const char* key, const char* data, int size, int append) noexcept {
+    auto table = map->get_mut();
+    try {
+        auto bytes = table.get<catsyn::IBytes>(key);
+        if (bytes && append == paTouch)
+            return 0;
+        if (bytes && append == paAppend)
+            return 1;
+    } catch (std::bad_cast&) {
+        return 1;
+    }
+    std::shared_lock<std::shared_mutex> lock(cores_mutex);
+    catsyn::cat_ptr<catsyn::IBytes> bytes;
+    cores.front()->nucl->get_factory()->create_bytes(nullptr, append == paTouch ? 1 : size + 1, bytes.put());
+    if (append != paTouch)
+        memcpy(bytes->data(), data, size);
+    static_cast<char*>(bytes->data())[bytes->size() - 1] = 0;
+    table.set(key, bytes.get());
+    return 0;
 }
