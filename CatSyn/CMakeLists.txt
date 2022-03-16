@@ -13,8 +13,6 @@ else()
 endif()
 
 add_library(catsyn SHARED
-    include/cathelper.h
-    include/catsyn.h
     src/catimpl.h
     src/enzyme.cpp
     src/frame.cpp
@@ -24,6 +22,10 @@ add_library(catsyn SHARED
     src/substrate.cpp
     src/table.cpp
     src/threading.cpp
+)
+target_sources(catsyn PUBLIC
+    include/cathelper.h
+    include/catsyn.h
 )
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)

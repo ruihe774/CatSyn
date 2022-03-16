@@ -26,3 +26,18 @@ if(CAT_BUILD_TESTS)
 endif()
 
 install(TARGETS mimalloc catsyn metalloporphyrin)
+install(FILES
+    CatSyn/include/catsyn.h
+    CatSyn/include/cathelper.h
+    TYPE INCLUDE
+)
+if(WIN32)
+    install(FILES
+        mimalloc/bin/mimalloc-redirect.dll
+        TYPE BIN
+    )
+    install(FILES
+        mimalloc/bin/mimalloc-redirect.lib
+        TYPE LIB
+    )
+endif()

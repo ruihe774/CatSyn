@@ -7,7 +7,6 @@ project(Metalloporphyrin
 )
 
 add_library(metalloporphyrin SHARED
-    include/VapourSynth.h
     src/porphyrin.h
     src/api.cpp
     src/core.cpp
@@ -15,6 +14,9 @@ add_library(metalloporphyrin SHARED
     src/map.cpp
     src/message.cpp
     ../CatSyn/src/new-delete.cpp
+)
+target_sources(metalloporphyrin PUBLIC
+    include/VapourSynth.h
 )
 target_include_directories(metalloporphyrin PUBLIC include)
 target_include_directories(metalloporphyrin PRIVATE src)
