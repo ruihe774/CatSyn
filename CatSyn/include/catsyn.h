@@ -263,6 +263,7 @@ struct Version {
     uint16_t minor;
     uint16_t patch;
     uint32_t commit;
+    const char* string;
 };
 
 class INucleus : virtual public IRef {
@@ -291,6 +292,5 @@ class INucleus : virtual public IRef {
 
 CAT_API void create_nucleus(INucleus** out) noexcept;
 CAT_API Version get_version() noexcept;
-CAT_API const char* get_version_string() noexcept;
 
 } // namespace catsyn

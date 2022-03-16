@@ -14,7 +14,7 @@ VSCore* createCore(int threads) noexcept {
                            "Metalloporphyrin {} ({})\n"
                            "{}\n"
                            "Simulating VapourSynth Core R{}, API {}.{}\n",
-                           catsyn::get_version_string(), version_string, description, copyright, vs_core_version,
+                           catsyn::get_version().string, version_string, description, copyright, vs_core_version,
                            VAPOURSYNTH_API_MAJOR, VAPOURSYNTH_API_MINOR);
         }
     } vs;
