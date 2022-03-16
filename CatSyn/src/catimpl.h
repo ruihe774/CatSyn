@@ -5,6 +5,8 @@
 #include <optional>
 #include <thread>
 
+#include <boost/container/small_vector.hpp>
+
 #ifdef _WIN32
 #include <Windows.h>
 #endif
@@ -84,7 +86,7 @@ class Logger final : public Object, public ILogger {
 };
 
 class Table final : public Object, public ITable {
-    typedef std::vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>> vector_type;
+    typedef boost::container::small_vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>, 16> vector_type;
     vector_type vec;
 
     size_t norm_ref(size_t ref) const noexcept;
@@ -111,18 +113,7 @@ class Substrate final : public Object, public ISubstrate {
     explicit Substrate(cat_ptr<const IFilter> filter) noexcept;
 };
 
-struct FrameInstance {
-    const cat_ptr<Substrate> substrate;
-    const size_t frame_idx;
-    cat_ptr<IFrame> product;
-    std::vector<FrameInstance*> inputs;
-    std::vector<FrameInstance*> outputs;
-    std::mutex processing_mutex;
-    std::unique_ptr<IOutput::Callback> callback;
-    bool false_dep;
-
-    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
-};
+struct FrameInstance;
 
 class MaintainTask {
   public:

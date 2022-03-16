@@ -4,6 +4,19 @@
 
 #include <catimpl.h>
 
+struct FrameInstance {
+    const cat_ptr<Substrate> substrate;
+    const size_t frame_idx;
+    cat_ptr<IFrame> product;
+    boost::container::small_vector<FrameInstance*, 13> inputs;
+    boost::container::small_vector<FrameInstance*, 30> outputs;
+    std::mutex processing_mutex;
+    std::unique_ptr<IOutput::Callback> callback;
+    bool false_dep;
+
+    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept;
+};
+
 static std::thread::id position_zero;
 
 Substrate::Substrate(cat_ptr<const IFilter> filter) noexcept {
@@ -95,7 +108,7 @@ void worker(Nucleus& nucl) noexcept {
             std::unique_lock<std::mutex> lock(inst->processing_mutex, std::try_to_lock);
             if (!lock.owns_lock() || inst->product)
                 return;
-            std::vector<IFrame*> input_frames;
+            boost::container::small_vector<IFrame*, 13> input_frames;
             for (auto input : inst->inputs) {
 #ifndef NDEBUG
                 if (!input->product)
