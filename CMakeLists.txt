@@ -24,3 +24,5 @@ add_subdirectory(Metalloporphyrin)
 if(CAT_BUILD_TESTS)
     add_subdirectory(tests EXCLUDE_FROM_ALL)
 endif()
+
+install(TARGETS mimalloc catsyn metalloporphyrin)
