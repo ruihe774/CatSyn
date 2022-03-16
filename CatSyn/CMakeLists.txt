@@ -23,9 +23,11 @@ add_library(catsyn SHARED
     src/nucleus.cpp
     src/substrate.cpp
     src/table.cpp
-    src/threading.cpp)
+    src/threading.cpp
+)
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
+target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(catsyn PRIVATE mimalloc-static)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
@@ -33,9 +35,12 @@ target_link_libraries(catsyn PRIVATE
     Boost::container
     Boost::dll
     Boost::lockfree
-    Boost::stacktrace)
+    Boost::stacktrace
+)
 target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)
 
 if(NOT WIN32)
     target_link_libraries(catsyn PRIVATE dl backtrace)
 endif()
+
+configure_file(src/catcfg.h.in catcfg.h)

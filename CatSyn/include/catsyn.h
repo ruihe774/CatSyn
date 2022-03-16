@@ -1,11 +1,10 @@
 #pragma once
 
-#include <array>
 #include <atomic>
+#include <exception>
 #include <functional>
 #include <new>
 #include <typeinfo>
-#include <utility>
 
 #ifdef _WIN32
 #define CAT_EXPORT __declspec(dllexport)
@@ -64,6 +63,24 @@ class IRef : virtual public IObject {
     }
 };
 
+enum class LogLevel {
+    DEBUG = 10,
+    INFO = 20,
+    WARNING = 30
+};
+
+class ILogSink : virtual public IObject {
+  public:
+    virtual void send_log(LogLevel level, const char* msg) noexcept = 0;
+};
+
+class ILogger : virtual public IObject {
+  public:
+    virtual void log(LogLevel level, const char* msg) const noexcept = 0;
+    virtual void set_level(LogLevel level) noexcept = 0;
+    virtual void set_sink(ILogSink* in) noexcept = 0;
+};
+
 class ITable : virtual public IObject {
   public:
     static constexpr size_t npos = static_cast<size_t>(-1);
@@ -115,60 +132,6 @@ class INumberArray : virtual public IBytes {
     SampleType sample_type;
 };
 
-struct FrameInfo;
-class IFrame;
-class IFactory;
-class ILogger;
-class IEnzymeFinder;
-class IRibosome;
-class IEnzyme;
-class ISubstrate;
-class IFilter;
-class IOutput;
-
-struct NucleusConfig {
-    unsigned thread_count;
-    unsigned mem_hint_mb;
-};
-
-class INucleus : virtual public IRef {
-  public:
-    virtual void calling_thread_init() noexcept = 0;
-
-    virtual IFactory* get_factory() noexcept = 0;
-    virtual ILogger* get_logger() noexcept = 0;
-
-    virtual ITable* get_enzyme_finders() noexcept = 0;
-    virtual ITable* get_ribosomes() noexcept = 0;
-
-    virtual void synthesize_enzymes() noexcept = 0;
-    virtual ITable* get_enzymes() noexcept = 0;
-
-    virtual void register_filter(const IFilter* in, ISubstrate** out) noexcept = 0;
-
-    virtual void set_config(NucleusConfig config) noexcept = 0;
-    virtual NucleusConfig get_config() const noexcept = 0;
-
-    virtual void react() noexcept = 0;
-    virtual bool is_reacting() const noexcept = 0;
-
-    virtual void create_output(ISubstrate* substrate, IOutput** output) noexcept = 0;
-};
-
-class IFactory : virtual public IRef {
-  public:
-    virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
-    virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
-    virtual void create_number_array(SampleType sample_type, const void* data, size_t len,
-                                     INumberArray** out) noexcept = 0;
-    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
-                              IFrame** out) noexcept = 0;
-    virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
-
-    virtual void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept = 0;
-    virtual void create_catsyn_v1_ribosome(IRibosome** out) noexcept = 0;
-};
-
 enum class ColorFamily {
     Gray = 1,
     RGB,
@@ -218,33 +181,6 @@ class IFrame : virtual public IObject {
     virtual void set_frame_props(const ITable* props) noexcept = 0;
 };
 
-enum class LogLevel {
-    DEBUG = 10,
-    INFO = 20,
-    WARNING = 30
-};
-
-class ILogSink : virtual public IObject {
-  public:
-    virtual void send_log(LogLevel level, const char* msg) noexcept = 0;
-};
-
-class ILogger : virtual public IObject {
-  public:
-    virtual void log(LogLevel level, const char* msg) const noexcept = 0;
-    virtual void set_level(LogLevel level) noexcept = 0;
-    virtual void set_sink(ILogSink* in) noexcept = 0;
-};
-
-class IFunction;
-
-class IEnzyme : virtual public IRef {
-  public:
-    virtual const char* get_identifier() const noexcept = 0;
-    virtual const char* get_namespace() const noexcept = 0;
-    virtual const ITable* get_functions() const noexcept = 0;
-};
-
 class IEnzymeFinder : virtual public IRef {
   public:
     virtual const char* const* find(size_t* len) noexcept = 0;
@@ -255,6 +191,27 @@ class IRibosome : virtual public IRef {
     virtual const char* get_identifier() const noexcept = 0;
     virtual void synthesize_enzyme(const char* token, IObject** out) noexcept = 0;
     virtual void hydrolyze_enzyme(IObject** inout) noexcept = 0;
+};
+
+class IEnzyme : virtual public IRef {
+  public:
+    virtual const char* get_identifier() const noexcept = 0;
+    virtual const char* get_namespace() const noexcept = 0;
+    virtual const ITable* get_functions() const noexcept = 0;
+};
+
+class IFactory : virtual public IRef {
+  public:
+    virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
+    virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
+    virtual void create_number_array(SampleType sample_type, const void* data, size_t len,
+                                     INumberArray** out) noexcept = 0;
+    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
+                              IFrame** out) noexcept = 0;
+    virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
+
+    virtual void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept = 0;
+    virtual void create_catsyn_v1_ribosome(IRibosome** out) noexcept = 0;
 };
 
 struct ArgSpec {
@@ -297,6 +254,43 @@ class IOutput : virtual public IRef {
     virtual void get_frame(size_t frame_idx, Callback cb) noexcept = 0;
 };
 
-CAT_API void create_nucleus(INucleus** out);
+struct NucleusConfig {
+    unsigned thread_count;
+    unsigned mem_hint_mb;
+};
+
+struct Version {
+    uint16_t minor;
+    uint16_t patch;
+    uint32_t commit;
+};
+
+class INucleus : virtual public IRef {
+  public:
+    virtual void calling_thread_init() noexcept = 0;
+
+    virtual IFactory* get_factory() noexcept = 0;
+    virtual ILogger* get_logger() noexcept = 0;
+
+    virtual ITable* get_enzyme_finders() noexcept = 0;
+    virtual ITable* get_ribosomes() noexcept = 0;
+
+    virtual void synthesize_enzymes() noexcept = 0;
+    virtual ITable* get_enzymes() noexcept = 0;
+
+    virtual void register_filter(const IFilter* in, ISubstrate** out) noexcept = 0;
+
+    virtual void set_config(NucleusConfig config) noexcept = 0;
+    virtual NucleusConfig get_config() const noexcept = 0;
+
+    virtual void react() noexcept = 0;
+    virtual bool is_reacting() const noexcept = 0;
+
+    virtual void create_output(ISubstrate* substrate, IOutput** output) noexcept = 0;
+};
+
+CAT_API void create_nucleus(INucleus** out) noexcept;
+CAT_API Version get_version() noexcept;
+CAT_API const char* get_version_string() noexcept;
 
 } // namespace catsyn

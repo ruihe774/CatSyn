@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <mutex>
 #include <optional>
@@ -20,6 +21,7 @@
 
 #include <cathelper.h>
 #include <catsyn.h>
+#include <catcfg.h>
 
 using namespace catsyn;
 

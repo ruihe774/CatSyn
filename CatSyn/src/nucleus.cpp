@@ -69,7 +69,21 @@ NucleusConfig Nucleus::get_config() const noexcept {
     return config;
 }
 
-CAT_API void catsyn::create_nucleus(INucleus** out) {
+Version get_version() noexcept {
+    return version;
+}
+
+const char* get_version_string() noexcept {
+    static struct VersionString {
+        char buf[128];
+        VersionString() {
+            fmt::format_to(buf, "CatSyn 1.{}.{}-{:x} ({})", version.minor, version.patch, version.commit, description);
+        }
+    } vs;
+    return vs.buf;
+}
+
+CAT_API void catsyn::create_nucleus(INucleus** out) noexcept {
     thread_init();
     mi_option_set_enabled_default(mi_option_large_os_pages, true);
 
