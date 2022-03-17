@@ -27,3 +27,6 @@ target_link_libraries(metalloporphyrin PRIVATE Boost::container)
 target_link_libraries(metalloporphyrin PRIVATE catsyn)
 
 configure_file(src/metalcfg.h.in metalcfg.h)
+
+install(TARGETS metalloporphyrin)
+install_pdb(metalloporphyrin)

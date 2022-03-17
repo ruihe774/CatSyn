@@ -46,3 +46,11 @@ if(NOT WIN32)
 endif()
 
 configure_file(src/catcfg.h.in catcfg.h)
+
+install(TARGETS catsyn)
+install(FILES
+    include/catsyn.h
+    include/cathelper.h
+    TYPE INCLUDE
+)
+install_pdb(catsyn)

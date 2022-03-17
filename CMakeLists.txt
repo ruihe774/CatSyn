@@ -8,10 +8,9 @@ project(Nekomonogatari
 
 include(config.cmake)
 include(retrieve_commit.cmake)
+include(install_pdb.cmake)
 
-set(MI_OVERRIDE OFF CACHE BOOL "Override the standard malloc interface (e.g. define entry points for malloc() etc)" FORCE)
-set(MI_USE_CXX ON CACHE BOOL "Use the C++ compiler to compile the library (instead of the C compiler)" FORCE)
-add_subdirectory(mimalloc EXCLUDE_FROM_ALL)
+include(mimalloc.cmake)
 
 add_subdirectory(boost EXCLUDE_FROM_ALL)
 
@@ -23,21 +22,4 @@ add_subdirectory(Metalloporphyrin)
 
 if(CAT_BUILD_TESTS)
     add_subdirectory(tests EXCLUDE_FROM_ALL)
-endif()
-
-install(TARGETS mimalloc catsyn metalloporphyrin)
-install(FILES
-    CatSyn/include/catsyn.h
-    CatSyn/include/cathelper.h
-    TYPE INCLUDE
-)
-if(WIN32)
-    install(FILES
-        mimalloc/bin/mimalloc-redirect.dll
-        TYPE BIN
-    )
-    install(FILES
-        mimalloc/bin/mimalloc-redirect.lib
-        TYPE LIB
-    )
 endif()
