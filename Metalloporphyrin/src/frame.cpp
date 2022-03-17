@@ -4,7 +4,7 @@
 
 #include <porphyrin.h>
 
-static boost::container::flat_map<uint32_t, std::unique_ptr<VSFormat>> formats;
+static boost::container::small_flat_map<uint32_t, std::unique_ptr<VSFormat>, 64> formats;
 static std::shared_mutex formats_mutex;
 
 static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW,

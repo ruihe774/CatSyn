@@ -26,6 +26,11 @@ struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
         void* userData;
         int id;
         ~HandlerInstance();
+        HandlerInstance(const HandlerInstance&) = delete;
+        HandlerInstance(HandlerInstance&&) noexcept;
+        HandlerInstance(VSMessageHandler handler, VSMessageHandlerFree freer, void* userData, int id) noexcept;
+        HandlerInstance& operator=(const HandlerInstance&) = delete;
+        HandlerInstance& operator=(HandlerInstance&&) noexcept;
     };
 
     boost::container::small_vector<HandlerInstance, 1> handlers;

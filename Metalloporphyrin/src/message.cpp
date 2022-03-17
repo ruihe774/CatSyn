@@ -7,8 +7,8 @@ UserLogSink sink;
 static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) {
     switch (level) {
     case catsyn::LogLevel::DEBUG:
-    case catsyn::LogLevel::INFO:
         return mtDebug;
+    case catsyn::LogLevel::INFO:
     case catsyn::LogLevel::WARNING:
         return mtWarning;
     default:
@@ -21,6 +21,23 @@ UserLogSink::HandlerInstance::~HandlerInstance() {
         freer(userData);
 }
 
+UserLogSink::HandlerInstance::HandlerInstance(HandlerInstance&& other) noexcept
+    : handler(other.handler), freer(other.freer), userData(other.userData), id(other.id) {
+    other.freer = nullptr;
+}
+
+UserLogSink::HandlerInstance& UserLogSink::HandlerInstance::operator=(UserLogSink::HandlerInstance&& other) noexcept {
+    handler = other.handler;
+    freer = other.freer;
+    userData = other.userData;
+    id = other.id;
+    other.freer = nullptr;
+    return *this;
+}
+
+UserLogSink::HandlerInstance::HandlerInstance(VSMessageHandler handler, VSMessageHandlerFree freer, void* userData, int id) noexcept
+    : handler(handler), freer(freer), userData(userData), id(id) {}
+
 void UserLogSink::send_log(catsyn::LogLevel level, const char* msg) noexcept {
     auto mt = loglevel_to_msgtype(level);
     std::shared_lock<std::shared_mutex> lock(cores_mutex);
@@ -32,7 +49,7 @@ void setMessageHandler(VSMessageHandler handler, void* userData) noexcept {
     std::unique_lock<std::shared_mutex> cores_lock(cores_mutex);
     sink.handlers.clear();
     if (handler) {
-        sink.handlers.push_back(UserLogSink::HandlerInstance{handler, nullptr, userData, 0});
+        sink.handlers.emplace_back(handler, nullptr, userData, 0);
         for (auto& core : cores)
             core->nucl->get_logger()->set_sink(&sink);
     } else
@@ -45,7 +62,7 @@ int addMessageHandler(VSMessageHandler handler, VSMessageHandlerFree free, void*
     if (handler) {
         auto empty = sink.handlers.empty();
         auto id = empty ? 0 : sink.handlers.back().id + 1;
-        sink.handlers.push_back(UserLogSink::HandlerInstance{handler, free, userData, id});
+        sink.handlers.emplace_back(handler, free, userData, id);
         if (empty)
             for (auto& core : cores)
                 core->nucl->get_logger()->set_sink(&sink);
