@@ -39,6 +39,7 @@ VSCore* createCore(int threads) noexcept {
     finders->set(catsyn::ITable::npos, finder.get());
     core->nucl->get_factory()->create_dll_enzyme_finder("@/vapoursynth64/plugins/", finder.put());
     finders->set(catsyn::ITable::npos, finder.get());
+    core->nucl->synthesize_enzymes();
     std::unique_lock<std::shared_mutex> lock(cores_mutex);
     if (!sink.handlers.empty())
         core->nucl->get_logger()->set_sink(&sink);

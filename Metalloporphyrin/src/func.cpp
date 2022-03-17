@@ -24,8 +24,8 @@ const std::type_info* VSFunc::get_out_type() const noexcept {
 }
 
 void VSFunc::invoke(catsyn::ITable* args, const IObject** out) {
-    if (specs)
-        catsyn::check_args(this, args);
+//    if (specs)
+//        catsyn::check_args(this, args);
 
     auto arg_map = std::make_unique<VSMap>(args);
     catsyn::cat_ptr<catsyn::ITable> result_table;
@@ -94,12 +94,12 @@ void freeFunc(VSFuncRef* f) noexcept {
 
 VSMap *invoke(VSPlugin *plugin, const char *name, const VSMap *args) noexcept {
     auto map = createMap();
-    int error;
-    auto func = propGetFunc(getFunctions(plugin), name, 0, &error);
+    auto func = catsyn::TableView<const catsyn::ITable>(plugin->enzyme->get_functions()).get<catsyn::IFunction>(name);
     if (!func) {
         setError(map, "no such function");
         return map;
     }
-    callFunc(func, args, map, plugin->core, &api);
+    VSFuncRef func_ref {func.clone()};
+    callFunc(&func_ref, args, map, plugin->core, &api);
     return map;
 }

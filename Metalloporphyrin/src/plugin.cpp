@@ -4,6 +4,8 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
+#include <Windows.h>
+
 #include <porphyrin.h>
 
 struct VSEnzyme final : public Object, public catsyn::IEnzyme {
@@ -95,6 +97,7 @@ void registerFunction(const char* name, const char* args, VSPublicFunction argsF
                       VSPlugin* plugin) noexcept {
     auto vse = plugin->enzyme.query<VSEnzyme>();
     vse->funcs.set(name, new VSFunc{plugin->core, argsFunc, functionData, nullptr, args_vs_to_cs(plugin, args)});
+    plugin->arg_strs[name] = args;
 }
 
 static void configurePlugin(const char* identifier, const char* defaultNamespace, const char*, int, int,
@@ -137,16 +140,63 @@ VSPlugin* getPluginByNs(const char* ns, VSCore* core) noexcept {
 }
 
 VSMap* getPlugins(VSCore* core) noexcept {
-    return new VSMap{core->nucl->get_enzymes()};
+    catsyn::cat_ptr<catsyn::ITable> table;
+    auto plugins = core->nucl->get_enzymes();
+    auto size = plugins->size();
+    auto factory = core->nucl->get_factory();
+    factory->create_table(size, table.put());
+    for (size_t old_ref = 0, new_ref = 0; old_ref < size; ++old_ref)
+        if (auto enzyme = &dynamic_cast<const catsyn::IEnzyme&>(*plugins->get(old_ref)); enzyme) {
+            auto identifier = enzyme->get_identifier();
+            auto ns = enzyme->get_namespace();
+            auto id_len = strlen(identifier);
+            auto ns_len = strlen(ns);
+            table->set_key(new_ref, identifier);
+            catsyn::cat_ptr<catsyn::IBytes> bytes;
+            factory->create_bytes(nullptr, id_len + ns_len + 3, bytes.put());
+            auto pb = static_cast<char*>(bytes->data());
+            memcpy(pb, ns, ns_len);
+            pb[ns_len] = ';';
+            memcpy(pb + ns_len + 1, identifier, id_len);
+            pb[ns_len + id_len + 1] = ';';
+            pb[ns_len + id_len + 2] = '\0';
+            table->set(new_ref++, bytes.get());
+        }
+    return new VSMap{std::move(table)};
 }
 
 VSMap* getFunctions(VSPlugin* plugin) noexcept {
-    return new VSMap{plugin->enzyme->get_functions()};
+    // TODO: support non-VS filters
+    catsyn::cat_ptr<catsyn::ITable> table;
+    auto factory = plugin->core->nucl->get_factory();
+    auto functions = plugin->enzyme->get_functions();
+    auto size = functions->size();
+    factory->create_table(size, table.put());
+    for (size_t old_ref = 0, new_ref = 0; old_ref < size; ++old_ref)
+        if (auto key = functions->get_key(old_ref); key) {
+            auto key_len = strlen(key);
+            table->set_key(new_ref, key);
+            catsyn::cat_ptr<catsyn::IBytes> bytes;
+            const auto& arg_str = plugin->arg_strs[key];
+            factory->create_bytes(nullptr, key_len + arg_str.size() + 2, bytes.put());
+            auto pb = static_cast<char*>(bytes->data());
+            memcpy(pb, key, key_len);
+            pb[key_len] = ';';
+            memcpy(pb + key_len + 1, arg_str.data(), arg_str.size());
+            pb[key_len + arg_str.size() + 1] = '\0';
+            table->set(new_ref++, bytes.get());
+        }
+    return new VSMap{std::move(table)};
 }
 
 const char* getPluginPath(const VSPlugin* plugin) noexcept {
-    // TODO
-    return nullptr;
+    try {
+        return plugin->enzyme.query<VSEnzyme>()->path.c_str();
+    } catch (std::bad_cast&) {
+        plugin->core->nucl->get_logger()->log(
+            catsyn::LogLevel::WARNING, "Metalloporphyrin: cannot retrieve path for non-VS enzyme (getPluginPath)");
+        return nullptr;
+    }
 }
 
 const char* VSRibosome::get_identifier() const noexcept {
@@ -157,13 +207,16 @@ void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noe
     *out = nullptr;
     if (boost::starts_with(token, "dll:"))
         try {
-            boost::dll::shared_library lib(token + 4);
-            auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
+//            boost::dll::shared_library lib(token + 4);
+//            auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
+            // TODO: why boost fails?
+            auto lib = LoadLibraryA(token + 4);
+            auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));
             std::unique_ptr<VSPlugin> vsp(new VSPlugin{core, new VSEnzyme{*core->nucl, token + 4}});
             init_func(configurePlugin, registerFunction, vsp.get());
             *out = vsp->enzyme.get();
             (*out)->add_ref();
-            loaded.emplace(*out, std::move(lib));
+//            loaded.emplace(*out, std::move(lib));
             std::lock_guard<std::shared_mutex> guard(core->plugins_mutex);
             core->plugins.emplace_back(std::move(vsp));
         } catch (boost::dll::fs::system_error&) {

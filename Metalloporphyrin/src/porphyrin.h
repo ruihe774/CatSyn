@@ -56,6 +56,8 @@ struct VSPlugin {
     catsyn::cat_ptr<catsyn::IEnzyme> enzyme;
     char args_buf[1024];
     char* pargs{args_buf};
+    // I'm sleepy
+    std::map<std::string, std::string> arg_strs;
 };
 
 struct VSCore {
