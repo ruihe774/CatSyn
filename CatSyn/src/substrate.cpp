@@ -1,5 +1,6 @@
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <boost/functional/hash.hpp>
 
@@ -136,6 +137,10 @@ static bool check_all_inputs_ready(FrameInstance* inst) {
     return std::all_of(inst->inputs.begin(), inst->inputs.end(), [](FrameInstance* input) { return !!input->product; });
 }
 
+[[noreturn]] static void unhandled_exception(std::exception_ptr exc) {
+    std::rethrow_exception(exc);
+}
+
 template<typename A, typename B> struct std::hash<std::pair<A, B>> {
     size_t operator()(const std::pair<A, B>& v) const noexcept {
         size_t seed = 0;
@@ -147,10 +152,14 @@ template<typename A, typename B> struct std::hash<std::pair<A, B>> {
 
 static FrameInstance*
 construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-          Substrate* substrate, size_t frame_idx, IOutput::Callback* callback = nullptr) noexcept;
+          std::unordered_set<FrameInstance*>& alive, Substrate* substrate, size_t frame_idx,
+          std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
+
+static bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
 
 void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
+    std::unordered_set<FrameInstance*> alive;
     uint8_t gc_tick = 0;
     while (true) {
         nucl.maintain_semaphore.acquire();
@@ -161,38 +170,55 @@ void maintainer(Nucleus& nucl) noexcept {
             case MaintainTask::Type::Notify: {
                 auto inst = static_cast<FrameInstance*>(task.get_pointer());
                 auto exc = *reinterpret_cast<std::exception_ptr*>(task.get_payload().data());
+                if (alive.find(inst) == alive.end())
+                    break;
                 if (!exc)
                     for (auto output : inst->outputs)
-                        if (check_all_inputs_ready(output))
+                        if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output))
                             post_work(nucl, output);
-                if (inst->callback)
+                if (inst->callback) {
                     (*inst->callback)(inst->product.get(), exc);
+                    inst->callback.reset();
+                } else if (exc) {
+                    if (kill_tree(inst, alive, exc))
+                        for (auto it = instances.begin(); it != instances.end();) {
+                            if (alive.find(it->second.get()) == alive.end())
+                                it = instances.erase(it);
+                            else
+                                ++it;
+                        }
+                    else
+                        unhandled_exception(exc);
+                }
                 break;
             }
             case MaintainTask::Type::Construct: {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
-                construct(nucl, instances, substrate, frame_idx, callback);
+                construct(nucl, instances, alive, substrate, frame_idx, std::unique_ptr<IOutput::Callback>(callback));
                 break;
             }
             }
         });
-        // XXX: UB?
-        if (++gc_tick == 0)
+
+        if (++gc_tick == 0)  // XXX: UB?
             if (auto before = nucl.alloc_stat.get_current();
                 before > static_cast<size_t>(nucl.config.mem_hint_mb) << 20) {
                 size_t destroy_count = 0;
-                for (auto it = instances.begin(); it != instances.end(); ++it) {
+                for (auto it = instances.begin(); it != instances.end();) {
                     auto inst = it->second.get();
-                    if (!inst->product)
+                    if (!inst->product || inst->callback)
                         goto next;
                     for (auto output : inst->outputs)
-                        if (!output->product)
+                        if (alive.find(output) != alive.end() && !output->product)
                             goto next;
                     it = instances.erase(it);
+                    alive.erase(inst);
                     ++destroy_count;
-                next:;
+                    continue;
+                next:
+                    ++it;
                 }
                 auto after = nucl.alloc_stat.get_current();
                 nucl.logger.log(LogLevel::DEBUG,
@@ -204,10 +230,19 @@ void maintainer(Nucleus& nucl) noexcept {
 
 FrameInstance* construct(Nucleus& nucl,
                          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-                         Substrate* substrate, size_t frame_idx, IOutput::Callback* callback) noexcept {
+                         std::unordered_set<FrameInstance*>& alive, Substrate* substrate, size_t frame_idx,
+                         std::unique_ptr<IOutput::Callback> callback) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
-    if (auto it = instances.find(key); it != instances.end())
-        return it->second.get();
+    if (auto it = instances.find(key); it != instances.end()) {
+        auto inst = it->second.get();
+        if (callback) {
+            if (inst->product)
+                (*callback)(inst->product.get(), {});
+            else
+                inst->callback = std::move(callback);
+        }
+        return inst;
+    }
 
     auto promoter = substrate->filters.find(position_zero)->second;
     if (substrate->filters.size() == 1)
@@ -220,8 +255,8 @@ FrameInstance* construct(Nucleus& nucl,
     auto instc = std::make_unique<FrameInstance>(substrate, frame_idx);
     for (size_t i = 0; i < len; ++i) {
         auto dep = deps[i];
-        auto input = construct(nucl, instances, &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)),
-                               dep.frame_idx);
+        auto input = construct(nucl, instances, alive,
+                               &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx);
         instc->inputs.emplace_back(input);
         input->outputs.emplace_back(instc.get());
     }
@@ -232,13 +267,27 @@ FrameInstance* construct(Nucleus& nucl,
             instc->false_dep = true;
         }
 
-    instc->callback = std::unique_ptr<IOutput::Callback>(callback);
+    instc->callback = std::move(callback);
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
+    alive.emplace(inst);
 
     if (check_all_inputs_ready(inst))
         post_work(nucl, inst);
 
     return inst;
+}
+
+bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept {
+    bool handled = false;
+    if (inst->callback) {
+        (*inst->callback)(nullptr, exc);
+        handled = true;
+    }
+    for (auto output : inst->outputs)
+        if (alive.find(output) != alive.end() && kill_tree(output, alive, exc))
+            handled = true;
+    alive.erase(inst);
+    return handled;
 }
 
 class Output final : public Object, public IOutput, public Shuttle {
