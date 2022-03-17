@@ -5,7 +5,12 @@
 #include <porphyrin.h>
 
 static boost::container::small_flat_map<uint32_t, std::unique_ptr<VSFormat>, 64> formats;
+static boost::container::small_flat_map<int, VSFormat*, 64> vsformatid_map;
 static std::shared_mutex formats_mutex;
+
+catsyn::cat_ptr<catsyn::IFrame>& VSFrameRef::get_mut() noexcept {
+    return reinterpret_cast<catsyn::cat_ptr<catsyn::IFrame>&>(frame);
+}
 
 static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW,
                                        int subSamplingH) {
@@ -20,7 +25,7 @@ static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bits
     return ff;
 }
 
-static const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name = "unknown", int id = 0) noexcept {
+const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name, int id) noexcept {
     static int id_offset = 1000;
     auto ffid = ff.id;
     {
@@ -42,7 +47,9 @@ static const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name =
         format.subSamplingH = static_cast<int>(ff.detail.height_subsampling);
         format.numPlanes = static_cast<int>(catsyn::num_planes(ff));
         std::unique_lock<std::shared_mutex> lock(formats_mutex);
-        return formats.emplace(ffid, std::make_unique<VSFormat>(format)).first->second.get();
+        auto vsf = formats.emplace(ffid, std::make_unique<VSFormat>(format)).first->second.get();
+        vsformatid_map.emplace(format.id, vsf);
+        return vsf;
     }
 }
 
@@ -92,15 +99,15 @@ static void registerFormats() noexcept {
     registerFormat(cmRGB, stFloat, 32, 0, 0, "RGBS", pfRGBS);
 }
 
+const VSFormat* getFormatPreset(int id, VSCore*) noexcept {
+    return vsformatid_map[id];
+}
+
 static struct FormatRegisterer {
     FormatRegisterer() noexcept {
         registerFormats();
     }
 } fmtreg [[maybe_unused]];
-
-struct VSFrameRef {
-    catsyn::cat_ptr<catsyn::IFrame> frame;
-};
 
 VSFrameRef* newVideoFrame(const VSFormat* format, int width, int height, const VSFrameRef* propSrc,
                           VSCore* core) noexcept {
@@ -162,7 +169,7 @@ const uint8_t* getReadPtr(const VSFrameRef* f, int plane) noexcept {
 }
 
 uint8_t* getWritePtr(VSFrameRef* f, int plane) noexcept {
-    return static_cast<uint8_t*>(f->frame->get_plane_mut(plane)->data());
+    return static_cast<uint8_t*>(f->get_mut()->get_plane_mut(plane)->data());
 }
 
 const VSFormat* getFrameFormat(const VSFrameRef* f) noexcept {
@@ -179,7 +186,7 @@ int getFrameHeight(const VSFrameRef* f, int plane) noexcept {
 
 void copyFrameProps(const VSFrameRef* src, VSFrameRef* dst, VSCore*) noexcept {
     catsyn::cat_ptr<const catsyn::ITable> props = src->frame->get_frame_props();
-    dst->frame->set_frame_props(props.clone().get());
+    dst->get_mut()->set_frame_props(props.clone().get());
 }
 
 const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept {
@@ -187,5 +194,5 @@ const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept {
 }
 
 VSMap* getFramePropsRW(VSFrameRef* f) noexcept {
-    return new VSMap(f->frame->get_frame_props_mut());
+    return new VSMap(f->get_mut()->get_frame_props_mut());
 }

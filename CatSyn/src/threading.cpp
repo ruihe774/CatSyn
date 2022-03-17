@@ -63,17 +63,25 @@ static const char* what(const EXCEPTION_RECORD* rec, const char** type_name) {
 }
 } // namespace cxxexcept
 
+CAT_API const char* catsyn::exception_ptr_what(std::exception_ptr excptr) noexcept {
+    auto rec = reinterpret_cast<EXCEPTION_RECORD*&>(excptr);
+    const char* type_name;
+    return cxxexcept::what(rec, &type_name);
+}
+
 #endif
 
 void terminate_with_stacktrace() {
     auto st = to_string(boost::stacktrace::stacktrace());
 #ifdef _WIN32
     auto excptr = std::current_exception();
-    auto rec = reinterpret_cast<EXCEPTION_RECORD*&>(excptr);
-    const char* type_name;
-    if (auto msg = cxxexcept::what(rec, &type_name); msg) {
-        fmt::format_to(std::back_inserter(st), "terminate called after throwing an instance of '{}'\n  what():  {}\n",
-                       type_name, msg);
+    if (excptr) {
+        auto rec = reinterpret_cast<EXCEPTION_RECORD*&>(excptr);
+        const char* type_name;
+        if (auto msg = cxxexcept::what(rec, &type_name); msg) {
+            fmt::format_to(std::back_inserter(st),
+                           "terminate called after throwing an instance of '{}'\n  what():  {}\n", type_name, msg);
+        }
     }
     st += "Aborted\n";
 #endif

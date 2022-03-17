@@ -2,6 +2,8 @@
 
 #include <catimpl.h>
 
+Shuttle::Shuttle(Nucleus& nucl) noexcept : nucl(nucl) {}
+
 NucleusConfig get_default_config() noexcept {
     return NucleusConfig{std::thread::hardware_concurrency(), 4096};
 }

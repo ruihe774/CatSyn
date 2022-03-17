@@ -22,16 +22,19 @@ struct FrameInstance {
 
 static std::thread::id position_zero;
 
-Substrate::Substrate(cat_ptr<const IFilter> filter) noexcept {
+Substrate::Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept : Shuttle(nucl) {
     filters[position_zero] = filter.usurp_or_clone();
 }
 
 VideoInfo Substrate::get_video_info() const noexcept {
     return filters.find(position_zero)->second->get_video_info();
 }
+INucleus* Substrate::get_nucleus() noexcept {
+    return &this->nucl;
+}
 
 void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
-    create_instance<Substrate>(out, wrap_cat_ptr(in));
+    create_instance<Substrate>(out, *this, wrap_cat_ptr(in));
 }
 
 MaintainTask MaintainTask::create(MaintainTask::Type t, void* p, size_t v,
@@ -313,7 +316,7 @@ void callbacker(Nucleus& nucl) noexcept {
             break;
         nucl.callback_queue.consume_all([](CallbackTask task) {
             auto callback = std::unique_ptr<IOutput::Callback>(task.callback);
-            auto frame = cat_ptr<IFrame>(task.frame, false);
+            auto frame = cat_ptr<const IFrame>(task.frame, false);
             auto exc = move_out_exc(task.exc);
             (*callback)(frame.get(), exc);
         });
@@ -327,7 +330,7 @@ class Output final : public Object, public IOutput, public Shuttle {
     void get_frame(size_t frame_idx, Callback cb) noexcept final {
         std::array<std::byte, MaintainTask::payload_size> pl;
         *reinterpret_cast<Callback**>(pl.data()) =
-            new Callback([cb = std::move(cb), &nucl = this->nucl](IFrame* frame, std::exception_ptr exc) {
+            new Callback([cb = std::move(cb), &nucl = this->nucl](const IFrame* frame, std::exception_ptr exc) {
                 if (frame)
                     frame->add_ref();
                 nucl.callback_queue.push(CallbackTask{

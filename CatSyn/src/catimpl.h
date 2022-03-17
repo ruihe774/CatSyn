@@ -32,6 +32,14 @@ class Object : virtual public IObject {
     }
 };
 
+class Nucleus;
+
+class Shuttle {
+  protected:
+    Nucleus& nucl;
+    explicit Shuttle(Nucleus& nucl) noexcept;
+};
+
 void write_err(const char* s, size_t n) noexcept;
 
 void thread_init() noexcept;
@@ -108,13 +116,14 @@ class Table final : public Object, public ITable {
     void clone(IObject** out) const noexcept final;
 };
 
-class Substrate final : public Object, public ISubstrate {
+class Substrate final : public Object, public ISubstrate, public Shuttle {
   public:
     boost::container::small_flat_map<std::thread::id, cat_ptr<IFilter>, 64> filters;
 
     VideoInfo get_video_info() const noexcept final;
+    INucleus* get_nucleus() noexcept final;
 
-    explicit Substrate(cat_ptr<const IFilter> filter) noexcept;
+    Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept;
 };
 
 struct FrameInstance;
@@ -144,7 +153,7 @@ class MaintainTask {
 
 struct CallbackTask {
     IOutput::Callback* callback;
-    IFrame* frame;
+    const IFrame* frame;
     std::array<std::byte, MaintainTask::payload_size> exc;
 };
 
@@ -217,12 +226,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     bool is_reacting() const noexcept final;
 
     void create_output(ISubstrate* substrate, IOutput** output) noexcept final;
-};
-
-class Shuttle {
-  protected:
-    Nucleus& nucl;
-    explicit Shuttle(Nucleus& nucl) : nucl(nucl) {}
 };
 
 class NotImplemted : public std::logic_error {

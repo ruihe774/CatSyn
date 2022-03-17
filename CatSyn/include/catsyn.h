@@ -227,9 +227,12 @@ class IFunction : virtual public IRef {
     virtual const std::type_info* get_out_type() const noexcept = 0;
 };
 
+class INucleus;
+
 class ISubstrate : virtual public IRef {
   public:
     virtual VideoInfo get_video_info() const noexcept = 0;
+    virtual INucleus* get_nucleus() noexcept = 0;
 };
 
 struct FrameSource {
@@ -253,7 +256,7 @@ class IFilter : virtual public IObject {
 
 class IOutput : virtual public IRef {
   public:
-    typedef std::function<void(IFrame* frame, std::exception_ptr exc)> Callback;
+    typedef std::function<void(const IFrame* frame, std::exception_ptr exc)> Callback;
     virtual void get_frame(size_t frame_idx, Callback cb) noexcept = 0;
 };
 
@@ -295,5 +298,6 @@ class INucleus : virtual public IRef {
 
 CAT_API void create_nucleus(INucleus** out) noexcept;
 CAT_API Version get_version() noexcept;
+CAT_API const char* exception_ptr_what(std::exception_ptr excptr) noexcept;
 
 } // namespace catsyn

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <optional>
 #include <shared_mutex>
+#include <vector>
 
 #include <boost/container/small_vector.hpp>
 
@@ -18,6 +20,8 @@ class Object : virtual public catsyn::IObject {
         delete this;
     }
 };
+
+extern VSAPI api;
 
 struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
     struct HandlerInstance {
@@ -60,8 +64,15 @@ void getCoreInfo2(VSCore* core, VSCoreInfo* info) noexcept;
 int64_t setMaxCacheSize(int64_t bytes, VSCore* core) noexcept;
 int setThreadCount(int threads, VSCore* core) noexcept;
 
+struct VSFrameRef {
+    catsyn::cat_ptr<const catsyn::IFrame> frame;
+    catsyn::cat_ptr<catsyn::IFrame>& get_mut() noexcept;
+};
+
 const VSFormat* registerFormat(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW, int subSamplingH,
                                VSCore*) noexcept;
+const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name = "unknown", int id = 0) noexcept;
+const VSFormat* getFormatPreset(int id, VSCore*) noexcept;
 VSFrameRef* newVideoFrame(const VSFormat* format, int width, int height, const VSFrameRef* propSrc,
                           VSCore* core) noexcept;
 VSFrameRef* newVideoFrame2(const VSFormat* format, int width, int height, const VSFrameRef** planeSrc,
@@ -81,12 +92,9 @@ VSMap* getFramePropsRW(VSFrameRef* f) noexcept;
 
 struct VSMap {
     catsyn::TableView<const catsyn::ITable> view;
-    bool mut;
-
-    explicit VSMap(catsyn::ITable* table) noexcept;
     explicit VSMap(const catsyn::ITable* table) noexcept;
-
-    catsyn::TableView<catsyn::ITable>& get_mut();
+    explicit VSMap(catsyn::cat_ptr<const catsyn::ITable> table) noexcept;
+    catsyn::TableView<catsyn::ITable>& get_mut() noexcept;
 };
 
 VSMap* createMap() noexcept;
@@ -110,3 +118,55 @@ int propSetIntArray(VSMap* map, const char* key, const int64_t* i, int size) noe
 int propSetFloat(VSMap* map, const char* key, double i, int append) noexcept;
 int propSetFloatArray(VSMap* map, const char* key, const double* i, int size) noexcept;
 int propSetData(VSMap* map, const char* key, const char* data, int size, int append) noexcept;
+VSNodeRef* propGetNode(const VSMap* map, const char* key, int index, int* error) noexcept;
+const VSFrameRef* propGetFrame(const VSMap* map, const char* key, int index, int* error) noexcept;
+VSFuncRef* propGetFunc(const VSMap* map, const char* key, int index, int* error) noexcept;
+int propSetNode(VSMap* map, const char* key, VSNodeRef* node, int append) noexcept;
+int propSetFrame(VSMap* map, const char* key, const VSFrameRef* f, int append) noexcept;
+int propSetFunc(VSMap* map, const char* key, VSFuncRef* func, int append) noexcept;
+
+struct VSNodeRef {
+    catsyn::INucleus& nucl;
+    catsyn::cat_ptr<catsyn::ISubstrate> substrate;
+    catsyn::cat_ptr<catsyn::IOutput> output;
+    VSVideoInfo vi;
+};
+
+VSNodeRef* cloneNodeRef(VSNodeRef* node) noexcept;
+void freeNode(VSNodeRef* node) noexcept;
+const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) noexcept;
+void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* userData) noexcept;
+const VSFrameRef* getFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept;
+void requestFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept;
+const VSVideoInfo* getVideoInfo(VSNodeRef* node) noexcept;
+void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept;
+
+struct VSFunc final : Object, catsyn::IFunction {
+    VSCore* core;
+    VSPublicFunction func;
+    void* userData;
+    VSFreeFuncData freer;
+    std::optional<std::vector<catsyn::ArgSpec>> specs;
+    const std::type_info& out_type;
+
+    VSFunc(const VSFunc&) = delete;
+    VSFunc(VSFunc&&) = delete;
+    VSFunc(VSCore* core, VSPublicFunction func, void* userData, VSFreeFuncData freer,
+           std::optional<std::vector<catsyn::ArgSpec>> specs = std::nullopt,
+           const std::type_info& out_type = typeid(catsyn::ITable)) noexcept;
+    ~VSFunc() final;
+
+    void invoke(catsyn::ITable* args, const IObject** out) final;
+    const catsyn::ArgSpec* get_arg_specs(size_t* len) const noexcept final;
+    const std::type_info* get_out_type() const noexcept final;
+};
+
+struct VSFuncRef {
+    catsyn::cat_ptr<catsyn::IFunction> func;
+};
+
+VSFuncRef* createFunc(VSPublicFunction func, void* userData, VSFreeFuncData free, VSCore* core,
+                      const VSAPI* vsapi) noexcept;
+VSFuncRef* cloneFuncRef(VSFuncRef* f) noexcept;
+void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore* core, const VSAPI* vsapi) noexcept;
+void freeFunc(VSFuncRef* f) noexcept;

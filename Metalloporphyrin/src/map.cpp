@@ -1,11 +1,8 @@
 #include <porphyrin.h>
 
-VSMap::VSMap(catsyn::ITable* table) noexcept : view(table), mut(true) {}
-VSMap::VSMap(const catsyn::ITable* table) noexcept : view(table), mut(false) {}
+VSMap::VSMap(const catsyn::ITable* table) noexcept : view(table) {}
 
-catsyn::TableView<catsyn::ITable>& VSMap::get_mut() {
-    if (!mut)
-        throw std::runtime_error("attempt to modify an immutable table");
+catsyn::TableView<catsyn::ITable>& VSMap::get_mut() noexcept {
     return reinterpret_cast<catsyn::TableView<catsyn::ITable>&>(view);
 }
 
@@ -34,17 +31,16 @@ void clearMap(VSMap* map) noexcept {
 
 void setError(VSMap* map, const char* errorMessage) noexcept {
     std::shared_lock<std::shared_mutex> lock(cores_mutex);
-    if (cores.empty())
-        no_core();
-    else {
-        catsyn::cat_ptr<catsyn::IBytes> bytes;
-        cores.front()->nucl->get_factory()->create_bytes(errorMessage, strlen(errorMessage) + 1, bytes.put());
-        map->get_mut().set("__error", bytes.get());
-    }
+    catsyn::cat_ptr<catsyn::IBytes> bytes;
+    cores.front()->nucl->get_factory()->create_bytes(errorMessage, strlen(errorMessage) + 1, bytes.put());
+    map->get_mut().set("__error", bytes.get());
 }
 
 const char* getError(const VSMap* map) noexcept {
-    return static_cast<const char*>(map->view.get<catsyn::IBytes>("__error")->data());
+    if (auto msg = map->view.get<catsyn::IBytes>("__error"); msg)
+        return static_cast<const char*>(msg->data());
+    else
+        return nullptr;
 }
 
 int propNumKeys(const VSMap* map) noexcept {
@@ -273,5 +269,104 @@ int propSetData(VSMap* map, const char* key, const char* data, int size, int app
         memcpy(bytes->data(), data, size);
     static_cast<char*>(bytes->data())[bytes->size() - 1] = 0;
     table.set(key, bytes.get());
+    return 0;
+}
+
+static VSVideoInfo vi_cs_to_vs(catsyn::VideoInfo vi) {
+    return VSVideoInfo{registerFormat(vi.frame_info.format),
+                       vi.fps.num,
+                       vi.fps.den,
+                       static_cast<int>(vi.frame_info.width),
+                       static_cast<int>(vi.frame_info.height),
+                       static_cast<int>(vi.frame_count),
+                       0};
+}
+
+VSNodeRef* propGetNode(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (index) {
+        *error = peIndex;
+        return nullptr;
+    }
+    auto val = map->view.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto substrate = val.try_query<const catsyn::ISubstrate>().clone();
+    if (!substrate) {
+        *error = peType;
+        return nullptr;
+    }
+    auto& nucl = *substrate->get_nucleus();
+    auto vi = vi_cs_to_vs(substrate->get_video_info());
+    return new VSNodeRef{nucl, std::move(substrate), nullptr, vi};
+}
+
+const VSFrameRef* propGetFrame(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (index) {
+        *error = peIndex;
+        return nullptr;
+    }
+    auto val = map->view.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto frame = val.try_query<const catsyn::IFrame>();
+    if (!frame) {
+        *error = peType;
+        return nullptr;
+    }
+    return new VSFrameRef{frame};
+}
+
+VSFuncRef* propGetFunc(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (index) {
+        *error = peIndex;
+        return nullptr;
+    }
+    auto val = map->view.get<catsyn::IObject>(key);
+    if (!val) {
+        *error = peUnset;
+        return nullptr;
+    }
+    auto func = val.try_query<const catsyn::IFunction>().clone();
+    if (!func) {
+        *error = peType;
+        return nullptr;
+    }
+    return new VSFuncRef{std::move(func)};
+}
+
+int propSetNode(VSMap* map, const char* key, VSNodeRef* node, int append) noexcept {
+    if (append == paTouch)
+        return 0;
+    if (append == paAppend) {
+        logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetNode)");
+        return 1;
+    }
+    map->get_mut().set(key, node->substrate.get());
+    return 0;
+}
+
+int propSetFrame(VSMap* map, const char* key, const VSFrameRef* f, int append) noexcept {
+    if (append == paTouch)
+        return 0;
+    if (append == paAppend) {
+        logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetFrame)");
+        return 1;
+    }
+    map->get_mut().set(key, f->frame.get());
+    return 0;
+}
+
+int propSetFunc(VSMap* map, const char* key, VSFuncRef* func, int append) noexcept {
+    if (append == paTouch)
+        return 0;
+    if (append == paAppend) {
+        logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetFunc)");
+        return 1;
+    }
+    map->get_mut().set(key, func->func.get());
     return 0;
 }

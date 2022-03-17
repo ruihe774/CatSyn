@@ -11,8 +11,10 @@ add_library(metalloporphyrin SHARED
     src/api.cpp
     src/core.cpp
     src/frame.cpp
+    src/func.cpp
     src/map.cpp
     src/message.cpp
+    src/node.cpp
     ../CatSyn/src/new-delete.cpp
 )
 target_sources(metalloporphyrin PUBLIC
