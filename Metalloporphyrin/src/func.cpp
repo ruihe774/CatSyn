@@ -1,8 +1,8 @@
 #include <porphyrin.h>
 
 VSFunc::VSFunc(VSCore* core, VSPublicFunction func, void* userData, VSFreeFuncData freer,
-               std::optional<std::vector<catsyn::ArgSpec>> specs, const std::type_info& out_type) noexcept
-    : core(core), func(func), userData(userData), freer(freer), specs(std::move(specs)), out_type(out_type) {}
+               std::optional<std::vector<catsyn::ArgSpec>> specs) noexcept
+    : core(core), func(func), userData(userData), freer(freer), specs(std::move(specs)) {}
 
 VSFunc::~VSFunc() {
     if (freer)
@@ -20,7 +20,7 @@ const catsyn::ArgSpec* VSFunc::get_arg_specs(size_t* len) const noexcept {
 }
 
 const std::type_info* VSFunc::get_out_type() const noexcept {
-    return &out_type;
+    return nullptr;
 }
 
 void VSFunc::invoke(catsyn::ITable* args, const IObject** out) {
@@ -38,9 +38,11 @@ void VSFunc::invoke(catsyn::ITable* args, const IObject** out) {
         throw std::runtime_error(err);
 
     auto result = std::move(result_map->get_mut());
-    if (out_type == typeid(catsyn::IFilter))
+    try {
         *out = result.get<catsyn::IFilter>("clip").detach();
-    else
+    } catch (std::bad_cast&) {
+    }
+    if (!*out)
         *out = result.table.detach();
 }
 

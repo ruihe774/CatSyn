@@ -147,13 +147,11 @@ struct VSFunc final : Object, catsyn::IFunction {
     void* userData;
     VSFreeFuncData freer;
     std::optional<std::vector<catsyn::ArgSpec>> specs;
-    const std::type_info& out_type;
 
     VSFunc(const VSFunc&) = delete;
     VSFunc(VSFunc&&) = delete;
     VSFunc(VSCore* core, VSPublicFunction func, void* userData, VSFreeFuncData freer,
-           std::optional<std::vector<catsyn::ArgSpec>> specs = std::nullopt,
-           const std::type_info& out_type = typeid(catsyn::ITable)) noexcept;
+           std::optional<std::vector<catsyn::ArgSpec>> specs = std::nullopt) noexcept;
     ~VSFunc() final;
 
     void invoke(catsyn::ITable* args, const IObject** out) final;
