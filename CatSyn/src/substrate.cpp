@@ -61,10 +61,12 @@ std::array<std::byte, MaintainTask::payload_size> MaintainTask::get_payload() co
 
 static void worker(Nucleus&) noexcept;
 static void maintainer(Nucleus&) noexcept;
+static void callbacker(Nucleus&) noexcept;
 
 void Nucleus::react() noexcept {
     maintainer_thread = Thread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
+    callback_thread = Thread(callbacker, std::ref(*this));
     for (size_t i = 0; i < config.thread_count; ++i)
         worker_threads.emplace_back(worker, std::ref(*this));
     logger.log(LogLevel::DEBUG, "Nucleus: reaction started");
@@ -79,10 +81,13 @@ Nucleus::~Nucleus() {
     for (auto&& t [[maybe_unused]] : worker_threads)
         work_semaphore.release();
     maintain_semaphore.release();
+    callback_semaphore.release();
     for (auto&& t : worker_threads)
         t.join();
     if (maintainer_thread)
         maintainer_thread->join();
+    if (callback_thread)
+        callback_thread->join();
 }
 
 [[noreturn, maybe_unused]] static void bug() {
@@ -202,7 +207,7 @@ void maintainer(Nucleus& nucl) noexcept {
             }
         });
 
-        if (++gc_tick == 0)  // XXX: UB?
+        if (++gc_tick == 0) // XXX: UB?
             if (auto before = nucl.alloc_stat.get_current();
                 before > static_cast<size_t>(nucl.config.mem_hint_mb) << 20) {
                 size_t destroy_count = 0;
@@ -290,13 +295,38 @@ bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, s
     return handled;
 }
 
+void callbacker(Nucleus& nucl) noexcept {
+    while (true) {
+        nucl.callback_semaphore.acquire();
+        if (nucl.stop.load(std::memory_order_acquire))
+            break;
+        nucl.callback_queue.consume_all([](CallbackTask task) {
+            auto callback = std::unique_ptr<IOutput::Callback>(task.callback);
+            auto frame = cat_ptr<IFrame>(task.frame, false);
+            auto exc = *reinterpret_cast<std::exception_ptr*>(task.exc.data());
+            (*callback)(frame.get(), exc);
+        });
+    }
+}
+
 class Output final : public Object, public IOutput, public Shuttle {
   public:
     cat_ptr<Substrate> substrate;
 
     void get_frame(size_t frame_idx, Callback cb) noexcept final {
         std::array<std::byte, MaintainTask::payload_size> pl;
-        *reinterpret_cast<Callback**>(pl.data()) = new Callback(std::move(cb));
+        *reinterpret_cast<Callback**>(pl.data()) =
+            new Callback([cb = std::move(cb), &nucl = this->nucl](IFrame* frame, std::exception_ptr exc) {
+                frame->add_ref();
+                std::array<std::byte, MaintainTask::payload_size> pl{};
+                *reinterpret_cast<std::exception_ptr*>(pl.data()) = exc;
+                nucl.callback_queue.push(CallbackTask{
+                    new Callback(std::move(const_cast<IOutput::Callback&>(cb))),
+                    frame,
+                    pl,
+                });
+                nucl.callback_semaphore.release();
+            });
         post_maintain_task(nucl, MaintainTask::Type::Construct, substrate.get(), frame_idx, pl);
     }
 

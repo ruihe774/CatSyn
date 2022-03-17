@@ -237,7 +237,10 @@ struct FrameSource {
     size_t frame_idx;
 };
 
-enum FilterFlags { ffMakeLinear = 4 };
+enum FilterFlags {
+    ffNormal = 0,
+    ffMakeLinear = 4
+};
 
 class IFilter : virtual public IObject {
   public:

@@ -142,6 +142,12 @@ class MaintainTask {
     static MaintainTask create(Type, void*, size_t, std::array<std::byte, payload_size> = {}) noexcept;
 };
 
+struct CallbackTask {
+    IOutput::Callback* callback;
+    IFrame* frame;
+    std::array<std::byte, MaintainTask::payload_size> exc;
+};
+
 NucleusConfig get_default_config() noexcept;
 
 class Nucleus final : public Object, public INucleus, public IFactory {
@@ -169,10 +175,13 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     std::atomic_bool stop{false};
     std::vector<Thread> worker_threads;
     std::optional<Thread> maintainer_thread;
+    std::optional<Thread> callback_thread;
     Semaphore work_semaphore;
     boost::lockfree::queue<FrameInstance*> work_queue{128};
     Semaphore maintain_semaphore{0, 1};
     boost::lockfree::queue<MaintainTask> maintain_queue{128};
+    Semaphore callback_semaphore{0, 1};
+    boost::lockfree::queue<CallbackTask> callback_queue{128};
 
     Nucleus();
     ~Nucleus() final;
