@@ -9,7 +9,7 @@
 struct FrameInstance {
     const cat_ptr<Substrate> substrate;
     const size_t frame_idx;
-    cat_ptr<IFrame> product;
+    cat_ptr<const IFrame> product;
     boost::container::small_vector<FrameInstance*, 13> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
     std::mutex processing_mutex;
@@ -133,7 +133,7 @@ void worker(Nucleus& nucl) noexcept {
             std::unique_lock<std::mutex> lock(inst->processing_mutex, std::try_to_lock);
             if (!lock.owns_lock() || inst->product)
                 return;
-            boost::container::small_vector<IFrame*, 13> input_frames;
+            boost::container::small_vector<const IFrame*, 13> input_frames;
             for (auto input : inst->inputs) {
 #ifndef NDEBUG
                 if (!input->product)
@@ -141,11 +141,11 @@ void worker(Nucleus& nucl) noexcept {
 #endif
                 input_frames.push_back(input->product.get());
             }
-            cat_ptr<IFrame> product;
+            cat_ptr<const IFrame> product;
             try {
                 inst->substrate->filters[std::this_thread::get_id()]->process_frame(
                     inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
-                    inst->inputs.size() - inst->false_dep, product.put());
+                    inst->inputs.size() - inst->false_dep, product.put_const());
             } catch (...) {
                 post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));
                 return;

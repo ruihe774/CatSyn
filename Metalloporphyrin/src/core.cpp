@@ -21,8 +21,8 @@ VSCore* createCore(int threads) noexcept {
 
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     catsyn::create_nucleus(nucl.put());
-    auto core = std::make_unique<VSCore>(
-        VSCore{std::move(nucl), VSCoreInfo{vs.buf, vs_core_version, VAPOURSYNTH_API_VERSION, 0, 0, 0}});
+    auto core = std::unique_ptr<VSCore>(
+        new VSCore{std::move(nucl), VSCoreInfo{vs.buf, vs_core_version, VAPOURSYNTH_API_VERSION, 0, 0, 0}});
     if (threads > 0) {
         auto cfg = core->nucl->get_config();
         cfg.thread_count = threads;

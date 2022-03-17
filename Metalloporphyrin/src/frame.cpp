@@ -25,6 +25,17 @@ static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bits
     return ff;
 }
 
+catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf) {
+    std::shared_lock<std::shared_mutex> lock(formats_mutex);
+    for (auto& item : formats)
+        if (item.second.get() == vsf) {
+            catsyn::FrameFormat ff;
+            ff.id = item.first;
+            return ff;
+        }
+    throw std::logic_error("format not registered");
+}
+
 const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name, int id) noexcept {
     static int id_offset = 1000;
     auto ffid = ff.id;

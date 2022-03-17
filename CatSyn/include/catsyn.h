@@ -249,9 +249,9 @@ class IFilter : virtual public IObject {
   public:
     virtual FilterFlags get_filter_flags() const noexcept = 0;
     virtual VideoInfo get_video_info() const noexcept = 0;
-    virtual const FrameSource* get_frame_dependency(size_t frame_idx, size_t* len) const noexcept = 0;
+    virtual const FrameSource* get_frame_dependency(size_t frame_idx, size_t* len) noexcept = 0;
     virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* sources,
-                               size_t source_count, IFrame** out) = 0;
+                               size_t source_count, const IFrame** out) = 0;
 };
 
 class IOutput : virtual public IRef {

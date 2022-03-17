@@ -18,7 +18,7 @@ VSMap* createMap() noexcept {
     else {
         catsyn::cat_ptr<catsyn::ITable> table;
         cores.front()->nucl->get_factory()->create_table(0, table.put());
-        return new VSMap(table.get());
+        return new VSMap(std::move(table));
     }
 }
 

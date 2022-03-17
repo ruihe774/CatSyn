@@ -91,3 +91,15 @@ void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore* core, const 
 void freeFunc(VSFuncRef* f) noexcept {
     delete f;
 }
+
+VSMap *invoke(VSPlugin *plugin, const char *name, const VSMap *args) noexcept {
+    auto map = createMap();
+    int error;
+    auto func = propGetFunc(getFunctions(plugin), name, 0, &error);
+    if (!func) {
+        setError(map, "no such function");
+        return map;
+    }
+    callFunc(func, args, map, plugin->core, &api);
+    return map;
+}

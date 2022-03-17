@@ -49,9 +49,18 @@ int addMessageHandler(VSMessageHandler handler, VSMessageHandlerFree free, void*
 int removeMessageHandler(int id) noexcept;
 void logMessage(int mt, const char* msg) noexcept;
 
+struct VSPlugin {
+    VSCore* core;
+    catsyn::cat_ptr<catsyn::IEnzyme> enzyme;
+    char args_buf[1024];
+    char* pargs{args_buf};
+};
+
 struct VSCore {
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     VSCoreInfo ci;
+    std::vector<std::unique_ptr<VSPlugin>> plugins;
+    std::shared_mutex plugins_mutex;
 };
 
 extern std::vector<std::unique_ptr<VSCore>> cores;
@@ -168,3 +177,21 @@ VSFuncRef* createFunc(VSPublicFunction func, void* userData, VSFreeFuncData free
 VSFuncRef* cloneFuncRef(VSFuncRef* f) noexcept;
 void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore* core, const VSAPI* vsapi) noexcept;
 void freeFunc(VSFuncRef* f) noexcept;
+
+void registerFunction(const char* name, const char* args, VSPublicFunction argsFunc, void* functionData,
+                      VSPlugin* plugin) noexcept;
+VSPlugin* getPluginById(const char* identifier, VSCore* core) noexcept;
+VSPlugin* getPluginByNs(const char* ns, VSCore* core) noexcept;
+VSMap* getPlugins(VSCore* core) noexcept;
+VSMap* getFunctions(VSPlugin* plugin) noexcept;
+
+catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf);
+void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
+                  VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore* core) noexcept;
+void setFilterError(const char *errorMessage, VSFrameContext *frameCtx) noexcept;
+
+VSMap *invoke(VSPlugin *plugin, const char *name, const VSMap *args) noexcept;
+void queryCompletedFrame(VSNodeRef **node, int *n, VSFrameContext *frameCtx) noexcept;
+void releaseFrameEarly(VSNodeRef *node, int n, VSFrameContext *frameCtx) noexcept;
+int getOutputIndex(VSFrameContext *frameCtx) noexcept;
+const char *getPluginPath(const VSPlugin *plugin) noexcept;
