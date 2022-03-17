@@ -15,6 +15,8 @@ void freeNode(VSNodeRef* node) noexcept {
 }
 
 void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* userData) noexcept {
+    if (!node->nucl.is_reacting())
+        node->nucl.react();
     if (!node->output)
         node->nucl.create_output(node->substrate.get(), node->output.put());
     node->output->get_frame(n, [=](const catsyn::IFrame* frame, std::exception_ptr exc) {
@@ -26,6 +28,8 @@ void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* u
 }
 
 const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) noexcept {
+    if (!node->nucl.is_reacting())
+        node->nucl.react();
     if (!node->output)
         node->nucl.create_output(node->substrate.get(), node->output.put());
     std::condition_variable cv;

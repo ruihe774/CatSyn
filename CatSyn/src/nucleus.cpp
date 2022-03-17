@@ -59,7 +59,6 @@ void Nucleus::calling_thread_init() noexcept {
 }
 
 void Nucleus::set_config(NucleusConfig cfg) noexcept {
-    // XXX: may race
     if (is_reacting())
         throw_set_config_when_reacting();
     config = cfg;

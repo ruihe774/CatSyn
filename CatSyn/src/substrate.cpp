@@ -67,6 +67,9 @@ static void maintainer(Nucleus&) noexcept;
 static void callbacker(Nucleus&) noexcept;
 
 void Nucleus::react() noexcept {
+    std::lock_guard<std::shared_mutex> guard(starting_mutex);
+    if (maintainer_thread)
+        return;
     maintainer_thread = Thread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
     callback_thread = Thread(callbacker, std::ref(*this));
@@ -76,6 +79,7 @@ void Nucleus::react() noexcept {
 }
 
 bool Nucleus::is_reacting() const noexcept {
+    std::shared_lock<std::shared_mutex> guard(starting_mutex);
     return !!maintainer_thread;
 }
 
