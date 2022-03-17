@@ -21,14 +21,24 @@ VSCore* createCore(int threads) noexcept {
 
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     catsyn::create_nucleus(nucl.put());
-    auto core = std::unique_ptr<VSCore>(
+    std::unique_ptr<VSCore> core(
         new VSCore{std::move(nucl), VSCoreInfo{vs.buf, vs_core_version, VAPOURSYNTH_API_VERSION, 0, 0, 0}});
     if (threads > 0) {
         auto cfg = core->nucl->get_config();
         cfg.thread_count = threads;
         core->nucl->set_config(cfg);
     }
-    auto pcore = core.get();
+    auto ribosomes = core->nucl->get_ribosomes();
+    auto size = ribosomes->size();
+    auto vsr = new VSRibosome(core.get());
+    ribosomes->set_key(size, vsr->get_identifier());
+    ribosomes->set(size, vsr);
+    auto finders = core->nucl->get_enzyme_finders();
+    catsyn::cat_ptr<catsyn::IEnzymeFinder> finder;
+    core->nucl->get_factory()->create_dll_enzyme_finder("@/vapoursynth64/coreplugins/", finder.put());
+    finders->set(catsyn::ITable::npos, finder.get());
+    core->nucl->get_factory()->create_dll_enzyme_finder("@/vapoursynth64/plugins/", finder.put());
+    finders->set(catsyn::ITable::npos, finder.get());
     std::unique_lock<std::shared_mutex> lock(cores_mutex);
     if (!sink.handlers.empty())
         core->nucl->get_logger()->set_sink(&sink);
@@ -36,6 +46,7 @@ VSCore* createCore(int threads) noexcept {
         core->nucl->get_logger()->log(
             catsyn::LogLevel::WARNING,
             "Metalloporphyrin: multiple cores created; logs will only be sent to the first created core");
+    auto pcore = core.get();
     cores.emplace_back(std::move(core));
     return pcore;
 }

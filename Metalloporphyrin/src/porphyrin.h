@@ -1,10 +1,12 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <shared_mutex>
 #include <vector>
 
 #include <boost/container/small_vector.hpp>
+#include <boost/dll.hpp>
 
 #include <cathelper.h>
 #include <catsyn.h>
@@ -188,10 +190,19 @@ VSMap* getFunctions(VSPlugin* plugin) noexcept;
 catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf);
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
                   VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore* core) noexcept;
-void setFilterError(const char *errorMessage, VSFrameContext *frameCtx) noexcept;
+void setFilterError(const char* errorMessage, VSFrameContext* frameCtx) noexcept;
 
-VSMap *invoke(VSPlugin *plugin, const char *name, const VSMap *args) noexcept;
-void queryCompletedFrame(VSNodeRef **node, int *n, VSFrameContext *frameCtx) noexcept;
-void releaseFrameEarly(VSNodeRef *node, int n, VSFrameContext *frameCtx) noexcept;
-int getOutputIndex(VSFrameContext *frameCtx) noexcept;
-const char *getPluginPath(const VSPlugin *plugin) noexcept;
+VSMap* invoke(VSPlugin* plugin, const char* name, const VSMap* args) noexcept;
+void queryCompletedFrame(VSNodeRef** node, int* n, VSFrameContext* frameCtx) noexcept;
+void releaseFrameEarly(VSNodeRef* node, int n, VSFrameContext* frameCtx) noexcept;
+int getOutputIndex(VSFrameContext* frameCtx) noexcept;
+const char* getPluginPath(const VSPlugin* plugin) noexcept;
+
+struct VSRibosome final : Object, catsyn::IRibosome {
+    VSCore* core;
+    std::map<IObject*, boost::dll::shared_library> loaded;
+    const char* get_identifier() const noexcept final;
+    void synthesize_enzyme(const char* token, IObject** out) noexcept final;
+    void hydrolyze_enzyme(IObject** inout) noexcept final;
+    explicit VSRibosome(VSCore* core) noexcept;
+};

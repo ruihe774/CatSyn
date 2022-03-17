@@ -26,7 +26,11 @@ target_include_directories(metalloporphyrin PRIVATE src)
 target_include_directories(metalloporphyrin PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(metalloporphyrin PRIVATE mimalloc)
 target_link_libraries(metalloporphyrin PRIVATE fmt)
-target_link_libraries(metalloporphyrin PRIVATE Boost::container)
+target_link_libraries(metalloporphyrin PRIVATE
+    Boost::algorithm
+    Boost::container
+    Boost::dll
+)
 target_link_libraries(metalloporphyrin PRIVATE catsyn)
 
 configure_file(src/metalcfg.h.in metalcfg.h)
