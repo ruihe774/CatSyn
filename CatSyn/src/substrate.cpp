@@ -94,6 +94,19 @@ Nucleus::~Nucleus() {
     throw std::logic_error("bug!");
 }
 
+static std::exception_ptr move_out_exc(std::array<std::byte, MaintainTask::payload_size> pl) noexcept {
+    auto pexc = reinterpret_cast<std::exception_ptr*>(pl.data());
+    auto exc = *pexc;
+    std::destroy_at(pexc);
+    return exc;
+}
+
+static std::array<std::byte, MaintainTask::payload_size> move_in_exc(std::exception_ptr exc) noexcept {
+    std::array<std::byte, MaintainTask::payload_size> pl;
+    new(reinterpret_cast<std::exception_ptr*>(pl.data())) std::exception_ptr(exc);
+    return pl;
+}
+
 template<typename... Args> static void post_maintain_task(Nucleus& nucl, Args&&... args) noexcept {
     nucl.maintain_queue.push(MaintainTask::create(std::forward<Args>(args)...));
     nucl.maintain_semaphore.release();
@@ -127,9 +140,7 @@ void worker(Nucleus& nucl) noexcept {
                     inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
                     inst->inputs.size() - inst->false_dep, product.put());
             } catch (...) {
-                std::array<std::byte, MaintainTask::payload_size> pl{};
-                *reinterpret_cast<std::exception_ptr*>(pl.data()) = std::current_exception();
-                post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, pl);
+                post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));
                 return;
             }
             inst->product = std::move(product);
@@ -174,7 +185,7 @@ void maintainer(Nucleus& nucl) noexcept {
             switch (task.get_type()) {
             case MaintainTask::Type::Notify: {
                 auto inst = static_cast<FrameInstance*>(task.get_pointer());
-                auto exc = *reinterpret_cast<std::exception_ptr*>(task.get_payload().data());
+                auto exc = move_out_exc(task.get_payload());
                 if (alive.find(inst) == alive.end())
                     break;
                 if (!exc)
@@ -303,7 +314,7 @@ void callbacker(Nucleus& nucl) noexcept {
         nucl.callback_queue.consume_all([](CallbackTask task) {
             auto callback = std::unique_ptr<IOutput::Callback>(task.callback);
             auto frame = cat_ptr<IFrame>(task.frame, false);
-            auto exc = *reinterpret_cast<std::exception_ptr*>(task.exc.data());
+            auto exc = move_out_exc(task.exc);
             (*callback)(frame.get(), exc);
         });
     }
@@ -317,13 +328,12 @@ class Output final : public Object, public IOutput, public Shuttle {
         std::array<std::byte, MaintainTask::payload_size> pl;
         *reinterpret_cast<Callback**>(pl.data()) =
             new Callback([cb = std::move(cb), &nucl = this->nucl](IFrame* frame, std::exception_ptr exc) {
-                frame->add_ref();
-                std::array<std::byte, MaintainTask::payload_size> pl{};
-                *reinterpret_cast<std::exception_ptr*>(pl.data()) = exc;
+                if (frame)
+                    frame->add_ref();
                 nucl.callback_queue.push(CallbackTask{
                     new Callback(std::move(const_cast<IOutput::Callback&>(cb))),
                     frame,
-                    pl,
+                    move_in_exc(exc),
                 });
                 nucl.callback_semaphore.release();
             });
