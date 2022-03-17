@@ -32,6 +32,10 @@ VSCore* createCore(int threads) noexcept {
     std::unique_lock<std::shared_mutex> lock(cores_mutex);
     if (!sink.handlers.empty())
         core->nucl->get_logger()->set_sink(&sink);
+    if (!cores.empty())
+        core->nucl->get_logger()->log(
+            catsyn::LogLevel::WARNING,
+            "Metalloporphyrin: multiple cores created; logs will only be sent to the first created core");
     cores.emplace_back(std::move(core));
     return pcore;
 }
