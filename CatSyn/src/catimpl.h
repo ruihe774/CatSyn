@@ -110,7 +110,7 @@ class Table final : public Object, public ITable {
 
 class Substrate final : public Object, public ISubstrate {
   public:
-    boost::container::flat_map<std::thread::id, cat_ptr<IFilter>> filters;
+    boost::container::small_flat_map<std::thread::id, cat_ptr<IFilter>, 64> filters;
 
     VideoInfo get_video_info() const noexcept final;
 

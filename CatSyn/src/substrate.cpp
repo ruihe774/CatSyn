@@ -192,10 +192,7 @@ void maintainer(Nucleus& nucl) noexcept {
                     for (auto output : inst->outputs)
                         if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output))
                             post_work(nucl, output);
-                if (inst->callback) {
-                    (*inst->callback)(inst->product.get(), exc);
-                    inst->callback.reset();
-                } else if (exc) {
+                if (exc) {
                     if (kill_tree(inst, alive, exc))
                         for (auto it = instances.begin(); it != instances.end();) {
                             if (alive.find(it->second.get()) == alive.end())
@@ -205,6 +202,9 @@ void maintainer(Nucleus& nucl) noexcept {
                         }
                     else
                         unhandled_exception(exc);
+                } else if (inst->callback) {
+                    (*inst->callback)(inst->product.get(), exc);
+                    inst->callback.reset();
                 }
                 break;
             }
