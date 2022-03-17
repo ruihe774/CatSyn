@@ -23,11 +23,13 @@ jobs:
       run: |
         cmake --preset Release-Clang
         cmake --build --preset Release-Clang
+        cmake --install build-release --prefix install-release
     - name: Package Artifact
       run: |
-        7z a -p${{secrets.ARTIPWD}} build-release.7z build-release
+        mv install-release Nekomonogatari-release
+        7z a -p${{secrets.ARTIPWD}} Nekomonogatari-release.7z Nekomonogatari-release
     - name: Upload Artifact
       uses: actions/upload-artifact@v3
       with:
-        name: build-release
-        path: build-release.7z
+        name: Nekomonogatari-release
+        path: Nekomonogatari-release.7z
