@@ -1,6 +1,7 @@
 #include <porphyrin.h>
 
 VSMap::VSMap(const catsyn::ITable* table) noexcept : view(table) {}
+VSMap::VSMap(catsyn::cat_ptr<const catsyn::ITable> table) noexcept : view(std::move(table)) {}
 
 catsyn::TableView<catsyn::ITable>& VSMap::get_mut() noexcept {
     return reinterpret_cast<catsyn::TableView<catsyn::ITable>&>(view);
