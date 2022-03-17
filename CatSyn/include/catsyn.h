@@ -242,7 +242,8 @@ struct FrameSource {
 
 enum FilterFlags {
     ffNormal = 0,
-    ffMakeLinear = 4
+    ffMakeLinear = 4,
+    ffSingleThreaded = 8,
 };
 
 class IFilter : virtual public IObject {

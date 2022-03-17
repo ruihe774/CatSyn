@@ -7,19 +7,18 @@ catsyn::TableView<catsyn::ITable>& VSMap::get_mut() noexcept {
     return reinterpret_cast<catsyn::TableView<catsyn::ITable>&>(view);
 }
 
-[[noreturn]] static void no_core() {
-    throw std::runtime_error("no core");
-}
+VSCore* createCore(int threads, bool temporary) noexcept;
 
 VSMap* createMap() noexcept {
     std::shared_lock<std::shared_mutex> lock(cores_mutex);
-    if (cores.empty())
-        no_core();
-    else {
-        catsyn::cat_ptr<catsyn::ITable> table;
-        cores.front()->nucl->get_factory()->create_table(0, table.put());
-        return new VSMap(std::move(table));
+    if (cores.empty()) {
+        // race!!
+        lock.unlock();
+        createCore(0, true);
     }
+    catsyn::cat_ptr<catsyn::ITable> table;
+    cores.front()->nucl->get_factory()->create_table(0, table.put());
+    return new VSMap(std::move(table));
 }
 
 void freeMap(VSMap* map) noexcept {

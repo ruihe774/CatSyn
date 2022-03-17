@@ -1,4 +1,5 @@
 #include <mutex>
+#include <queue>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -10,14 +11,15 @@ struct FrameInstance {
     const cat_ptr<Substrate> substrate;
     const size_t frame_idx;
     cat_ptr<const IFrame> product;
-    boost::container::small_vector<FrameInstance*, 13> inputs;
+    boost::container::small_vector<FrameInstance*, 12> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
     std::mutex processing_mutex;
     std::unique_ptr<IOutput::Callback> callback;
     bool false_dep;
+    bool single_threaded;
 
     FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
-        : substrate(substrate), frame_idx(frame_idx), false_dep(false) {}
+        : substrate(substrate), frame_idx(frame_idx), false_dep(false), single_threaded(false) {}
 };
 
 static std::thread::id position_zero;
@@ -110,7 +112,7 @@ static std::exception_ptr move_out_exc(std::array<std::byte, MaintainTask::paylo
 
 static std::array<std::byte, MaintainTask::payload_size> move_in_exc(std::exception_ptr exc) noexcept {
     std::array<std::byte, MaintainTask::payload_size> pl;
-    new(reinterpret_cast<std::exception_ptr*>(pl.data())) std::exception_ptr(exc);
+    new (reinterpret_cast<std::exception_ptr*>(pl.data())) std::exception_ptr(exc);
     return pl;
 }
 
@@ -175,14 +177,16 @@ template<typename A, typename B> struct std::hash<std::pair<A, B>> {
 
 static FrameInstance*
 construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-          std::unordered_set<FrameInstance*>& alive, Substrate* substrate, size_t frame_idx,
-          std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
+          std::unordered_set<FrameInstance*>& alive,
+          std::unordered_map<Substrate*, std::pair<bool, std::queue<FrameInstance*>>>& neck, Substrate* substrate,
+          size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
 
 static bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
 
 void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
     std::unordered_set<FrameInstance*> alive;
+    std::unordered_map<Substrate*, std::pair<bool, std::queue<FrameInstance*>>> neck;
     uint8_t gc_tick = 0;
     while (true) {
         nucl.maintain_semaphore.acquire();
@@ -195,10 +199,34 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto exc = move_out_exc(task.get_payload());
                 if (alive.find(inst) == alive.end())
                     break;
+                if (inst->single_threaded) {
+                    auto& item = neck[inst->substrate.get()];
+                    auto& busy = item.first;
+                    auto& queue = item.second;
+                    if (queue.empty())
+                        busy = false;
+                    else {
+                        post_work(nucl, queue.front());
+                        queue.pop();
+                    }
+                    inst->single_threaded = false;
+                }
                 if (!exc)
                     for (auto output : inst->outputs)
-                        if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output))
-                            post_work(nucl, output);
+                        if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output)) {
+                            if (!output->single_threaded)
+                                post_work(nucl, output);
+                            else {
+                                auto& item = neck[inst->substrate.get()];
+                                auto& busy = item.first;
+                                auto& queue = item.second;
+                                if (!busy) {
+                                    post_work(nucl, output);
+                                    busy = true;
+                                } else
+                                    queue.push(output);
+                            }
+                        }
                 if (exc) {
                     if (kill_tree(inst, alive, exc))
                         for (auto it = instances.begin(); it != instances.end();) {
@@ -219,7 +247,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
-                construct(nucl, instances, alive, substrate, frame_idx, std::unique_ptr<IOutput::Callback>(callback));
+                construct(nucl, instances, alive, neck, substrate, frame_idx, std::unique_ptr<IOutput::Callback>(callback));
                 break;
             }
             }
@@ -231,7 +259,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 size_t destroy_count = 0;
                 for (auto it = instances.begin(); it != instances.end();) {
                     auto inst = it->second.get();
-                    if (!inst->product || inst->callback)
+                    if (!inst->product || inst->callback || inst->single_threaded)
                         goto next;
                     for (auto output : inst->outputs)
                         if (alive.find(output) != alive.end() && !output->product)
@@ -253,8 +281,9 @@ void maintainer(Nucleus& nucl) noexcept {
 
 FrameInstance* construct(Nucleus& nucl,
                          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-                         std::unordered_set<FrameInstance*>& alive, Substrate* substrate, size_t frame_idx,
-                         std::unique_ptr<IOutput::Callback> callback) noexcept {
+                         std::unordered_set<FrameInstance*>& alive,
+                         std::unordered_map<Substrate*, std::pair<bool, std::queue<FrameInstance*>>>& neck,
+                         Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end()) {
         auto inst = it->second.get();
@@ -278,24 +307,39 @@ FrameInstance* construct(Nucleus& nucl,
     auto instc = std::make_unique<FrameInstance>(substrate, frame_idx);
     for (size_t i = 0; i < len; ++i) {
         auto dep = deps[i];
-        auto input = construct(nucl, instances, alive,
+        auto input = construct(nucl, instances, alive, neck,
                                &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx);
         instc->inputs.emplace_back(input);
         input->outputs.emplace_back(instc.get());
     }
 
-    if ((promoter->get_filter_flags() & ffMakeLinear) && frame_idx)
+    auto ff = promoter->get_filter_flags();
+    if ((ff & ffMakeLinear) && frame_idx)
         if (auto prev = instances.find(std::make_pair(substrate, frame_idx - 1)); prev != instances.end()) {
             instc->inputs.emplace_back(prev->second.get());
             instc->false_dep = true;
         }
+    if (ff & ffSingleThreaded)
+        instc->single_threaded = true;
 
     instc->callback = std::move(callback);
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
     alive.emplace(inst);
 
-    if (check_all_inputs_ready(inst))
-        post_work(nucl, inst);
+    if (check_all_inputs_ready(inst)) {
+        if (!inst->single_threaded)
+            post_work(nucl, inst);
+        else {
+            auto& item = neck[inst->substrate.get()];
+            auto& busy = item.first;
+            auto& queue = item.second;
+            if (!busy) {
+                post_work(nucl, inst);
+                busy = true;
+            } else
+                queue.push(inst);
+        }
+    }
 
     return inst;
 }

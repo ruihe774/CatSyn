@@ -5,7 +5,7 @@
 std::vector<std::unique_ptr<VSCore>> cores;
 std::shared_mutex cores_mutex;
 
-VSCore* createCore(int threads) noexcept {
+VSCore* createCore(int threads, bool temporary) noexcept {
     static struct VersionString {
         char buf[1024];
         VersionString() {
@@ -18,7 +18,14 @@ VSCore* createCore(int threads) noexcept {
                            VAPOURSYNTH_API_MAJOR, VAPOURSYNTH_API_MINOR);
         }
     } vs;
-
+    static bool has_temp_core = false;
+    if (has_temp_core) {
+        has_temp_core = false;
+        auto core = cores.front().get();
+        setThreadCount(threads, core);
+        return core;
+    }
+    has_temp_core = temporary;
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     catsyn::create_nucleus(nucl.put());
     std::unique_ptr<VSCore> core(
@@ -50,6 +57,10 @@ VSCore* createCore(int threads) noexcept {
     auto pcore = core.get();
     cores.emplace_back(std::move(core));
     return pcore;
+}
+
+VSCore* createCore(int threads) noexcept {
+    return createCore(threads, false);
 }
 
 [[noreturn]] static void invalid_core_pointer() {

@@ -84,7 +84,7 @@ void requestFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexce
         .push_back(catsyn::FrameSource{node->substrate.get(), static_cast<size_t>(n)});
 }
 
-void setFilterError(const char *errorMessage, VSFrameContext *frameCtx) noexcept {
+void setFilterError(const char* errorMessage, VSFrameContext* frameCtx) noexcept {
     frameCtx->error = errorMessage;
 }
 
@@ -107,13 +107,13 @@ struct VSFilter final : Object, catsyn::IFilter {
     VSFilterFree freer;
     void* instanceData;
     void* frameData;
-    bool makeLinear;
+    catsyn::FilterFlags flags;
     VSFrameContext ctx;
 
     VSFilter(const VSFilter&) = delete;
     VSFilter(VSFilter&&) = delete;
     VSFilter(VSCore* core, catsyn::VideoInfo vi, VSFilterGetFrame getFrame, VSFilterFree freer, void* instanceData,
-             bool makeLinear) noexcept;
+             catsyn::FilterFlags flags) noexcept;
     ~VSFilter() final;
 
     void clone(catsyn::IObject** out) const noexcept final;
@@ -137,7 +137,7 @@ static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
 }
 
 [[noreturn]] static void fm_not_support() {
-    throw std::invalid_argument("filterMode not supported: only fmParallel is supported");
+    throw std::invalid_argument("fmSerial not supported");
 }
 
 [[noreturn]] static void nf_not_support() {
@@ -146,20 +146,22 @@ static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
 
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
                   VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore* core) noexcept {
-    if (filterMode != fmParallel)
+    if (filterMode >= fmSerial)
         fm_not_support();
     if (flags > nfMakeLinear || flags & nfIsCache)
         nf_not_support();
     std::unique_ptr<VSNodeRef> node(new VSNodeRef{*core->nucl});
     init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core, &api);
     out->get_mut().set("clip",
-                       new VSFilter(core, vi_vs_to_cs(node->vi), getFrame, freer, instanceData, flags & nfMakeLinear));
+                       new VSFilter(core, vi_vs_to_cs(node->vi), getFrame, freer, instanceData,
+                                    catsyn::FilterFlags((flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
+                                                        (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded))));
 }
 
 VSFilter::VSFilter(VSCore* core, catsyn::VideoInfo vi, VSFilterGetFrame getFrame, VSFilterFree freer,
-                   void* instanceData, bool makeLinear) noexcept
+                   void* instanceData, catsyn::FilterFlags flags) noexcept
     : core(core), vi(vi), getFrame(getFrame), freer(freer), instanceData(instanceData), frameData(nullptr),
-      makeLinear(makeLinear) {}
+      flags(flags) {}
 
 VSFilter::~VSFilter() {
     if (freer)
@@ -167,14 +169,11 @@ VSFilter::~VSFilter() {
 }
 
 void VSFilter::clone(catsyn::IObject** out) const noexcept {
-    catsyn::create_instance<VSFilter>(out, core, vi, getFrame, nullptr, instanceData, makeLinear);
+    catsyn::create_instance<VSFilter>(out, core, vi, getFrame, nullptr, instanceData, flags);
 }
 
 catsyn::FilterFlags VSFilter::get_filter_flags() const noexcept {
-    if (makeLinear)
-        return catsyn::ffMakeLinear;
-    else
-        return catsyn::ffNormal;
+    return flags;
 }
 
 catsyn::VideoInfo VSFilter::get_video_info() const noexcept {
@@ -215,14 +214,14 @@ void VSFilter::process_frame(size_t frame_idx, const catsyn::IFrame* const* inpu
     throw std::logic_error("not implemented");
 }
 
-void queryCompletedFrame(VSNodeRef **node, int *n, VSFrameContext *frameCtx) noexcept {
+void queryCompletedFrame(VSNodeRef** node, int* n, VSFrameContext* frameCtx) noexcept {
     not_implemented();
 }
 
-void releaseFrameEarly(VSNodeRef *node, int n, VSFrameContext *frameCtx) noexcept {
+void releaseFrameEarly(VSNodeRef* node, int n, VSFrameContext* frameCtx) noexcept {
     node->nucl.get_logger()->log(catsyn::LogLevel::WARNING, "Metalloporphyrin: not implemented (releaseFrameEarly)");
 }
 
-int getOutputIndex(VSFrameContext *frameCtx) noexcept {
+int getOutputIndex(VSFrameContext* frameCtx) noexcept {
     return 0;
 }
