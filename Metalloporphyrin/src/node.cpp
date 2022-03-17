@@ -109,11 +109,12 @@ struct VSFilter final : Object, catsyn::IFilter {
     void* frameData;
     catsyn::FilterFlags flags;
     VSFrameContext ctx;
+    bool has_input;
 
     VSFilter(const VSFilter&) = delete;
     VSFilter(VSFilter&&) = delete;
     VSFilter(VSCore* core, catsyn::VideoInfo vi, VSFilterGetFrame getFrame, VSFilterFree freer, void* instanceData,
-             catsyn::FilterFlags flags) noexcept;
+             catsyn::FilterFlags flags, bool has_input) noexcept;
     ~VSFilter() final;
 
     void clone(catsyn::IObject** out) const noexcept final;
@@ -152,24 +153,28 @@ void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit in
         nf_not_support();
     std::unique_ptr<VSNodeRef> node(new VSNodeRef{*core->nucl});
     init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core, &api);
+    bool has_input = false;
+    for (size_t ref = 0, size = in->view.size(); ref < size; ++ref)
+        if (dynamic_cast<const catsyn::ISubstrate*>(in->view.table->get(ref)))
+            has_input = true;
     out->get_mut().set("clip",
                        new VSFilter(core, vi_vs_to_cs(node->vi), getFrame, freer, instanceData,
                                     catsyn::FilterFlags((flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
-                                                        (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded))));
+                                                        (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded)), has_input));
 }
 
 VSFilter::VSFilter(VSCore* core, catsyn::VideoInfo vi, VSFilterGetFrame getFrame, VSFilterFree freer,
-                   void* instanceData, catsyn::FilterFlags flags) noexcept
+                   void* instanceData, catsyn::FilterFlags flags, bool has_input) noexcept
     : core(core), vi(vi), getFrame(getFrame), freer(freer), instanceData(instanceData), frameData(nullptr),
-      flags(flags) {}
+      flags(flags), has_input(has_input) {}
 
 VSFilter::~VSFilter() {
-    if (freer)
-        freer(instanceData, core, &api);
+//    if (freer)
+//        freer(instanceData, core, &api);
 }
 
 void VSFilter::clone(catsyn::IObject** out) const noexcept {
-    catsyn::create_instance<VSFilter>(out, core, vi, getFrame, nullptr, instanceData, flags);
+    catsyn::create_instance<VSFilter>(out, core, vi, getFrame, nullptr, instanceData, flags, has_input);
 }
 
 catsyn::FilterFlags VSFilter::get_filter_flags() const noexcept {
@@ -185,6 +190,10 @@ catsyn::VideoInfo VSFilter::get_video_info() const noexcept {
 }
 
 const catsyn::FrameSource* VSFilter::get_frame_dependency(size_t frame_idx, size_t* len) noexcept {
+    if (!has_input) {
+        *len = 0;
+        return nullptr;
+    }
     ctx.frames = VSFrameContext::request_container{};
     ctx.error = nullptr;
     getFrame(static_cast<int>(frame_idx), arInitial, &instanceData, &frameData, &ctx, core, &api);
@@ -203,7 +212,7 @@ void VSFilter::process_frame(size_t frame_idx, const catsyn::IFrame* const* inpu
     for (size_t i = 0; i < source_count; ++i)
         frames.emplace(sources[i], input_frames[i]);
     auto frame_ref = const_cast<VSFrameRef*>(
-        getFrame(static_cast<int>(frame_idx), arAllFramesReady, &instanceData, &frameData, &ctx, core, &api));
+        getFrame(static_cast<int>(frame_idx), has_input ? arAllFramesReady : arInitial, &instanceData, &frameData, &ctx, core, &api));
     if (ctx.error)
         throw_filter_error(ctx.error);
     *out = frame_ref->frame.detach();

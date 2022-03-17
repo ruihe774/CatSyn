@@ -316,7 +316,9 @@ FrameInstance* construct(Nucleus& nucl,
     auto ff = promoter->get_filter_flags();
     if ((ff & ffMakeLinear) && frame_idx)
         if (auto prev = instances.find(std::make_pair(substrate, frame_idx - 1)); prev != instances.end()) {
-            instc->inputs.emplace_back(prev->second.get());
+            auto input = prev->second.get();
+            instc->inputs.emplace_back(input);
+            input->outputs.emplace_back(instc.get());
             instc->false_dep = true;
         }
     if (ff & ffSingleThreaded)
