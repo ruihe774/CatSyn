@@ -1,4 +1,3 @@
-#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -12,8 +11,8 @@ struct FrameInstance {
     cat_ptr<const IFrame> product;
     boost::container::small_vector<FrameInstance*, 12> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
-    std::mutex processing_mutex;
     std::unique_ptr<IOutput::Callback> callback;
+    std::atomic_flag taken;
     bool false_dep;
     bool single_threaded;
 
@@ -129,8 +128,7 @@ void worker(Nucleus& nucl) noexcept {
         if (nucl.stop.load(std::memory_order_acquire))
             break;
         nucl.work_queue.consume_one([&](FrameInstance* inst) {
-            std::unique_lock<std::mutex> lock(inst->processing_mutex, std::try_to_lock);
-            if (!lock.owns_lock() || inst->product)
+            if (inst->taken.test_and_set(std::memory_order_acq_rel))
                 return;
             boost::container::small_vector<const IFrame*, 12> input_frames;
             for (auto input : inst->inputs) {
