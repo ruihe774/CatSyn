@@ -20,6 +20,10 @@ add_subdirectory(CatSyn)
 
 add_subdirectory(Metalloporphyrin)
 
+add_subdirectory(zimg EXCLUDE_FROM_ALL)
+
+add_subdirectory(VapStd)
+
 if(CAT_BUILD_TESTS)
     add_subdirectory(tests EXCLUDE_FROM_ALL)
 endif()
