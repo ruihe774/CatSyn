@@ -119,7 +119,7 @@ template<typename... Args> static void post_maintain_task(Nucleus& nucl, Args&&.
     nucl.maintain_semaphore.release();
 }
 
-static void post_work(Nucleus& nucl, FrameInstance* inst) noexcept {
+static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
     nucl.work_queue.push(inst);
     nucl.work_semaphore.release();
 }
@@ -181,6 +181,9 @@ construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::
 
 static bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
 
+static void post_work(Nucleus& nucl, FrameInstance* inst,
+                      std::unordered_map<Substrate*, std::pair<bool, std::queue<FrameInstance*>>>& neck) noexcept;
+
 void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
     std::unordered_set<FrameInstance*> alive;
@@ -204,27 +207,15 @@ void maintainer(Nucleus& nucl) noexcept {
                     if (queue.empty())
                         busy = false;
                     else {
-                        post_work(nucl, queue.front());
+                        post_work_direct(nucl, queue.front());
                         queue.pop();
                     }
                     inst->single_threaded = false;
                 }
                 if (!exc)
                     for (auto output : inst->outputs)
-                        if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output)) {
-                            if (!output->single_threaded)
-                                post_work(nucl, output);
-                            else {
-                                auto& item = neck[inst->substrate.get()];
-                                auto& busy = item.first;
-                                auto& queue = item.second;
-                                if (!busy) {
-                                    post_work(nucl, output);
-                                    busy = true;
-                                } else
-                                    queue.push(output);
-                            }
-                        }
+                        if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output))
+                            post_work(nucl, output, neck);
                 if (exc) {
                     if (kill_tree(inst, alive, exc))
                         for (auto it = instances.begin(); it != instances.end();) {
@@ -245,7 +236,8 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
-                construct(nucl, instances, alive, neck, substrate, frame_idx, std::unique_ptr<IOutput::Callback>(callback));
+                construct(nucl, instances, alive, neck, substrate, frame_idx,
+                          std::unique_ptr<IOutput::Callback>(callback));
                 break;
             }
             }
@@ -329,20 +321,8 @@ FrameInstance* construct(Nucleus& nucl,
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
     alive.emplace(inst);
 
-    if (check_all_inputs_ready(inst)) {
-        if (!inst->single_threaded)
-            post_work(nucl, inst);
-        else {
-            auto& item = neck[inst->substrate.get()];
-            auto& busy = item.first;
-            auto& queue = item.second;
-            if (!busy) {
-                post_work(nucl, inst);
-                busy = true;
-            } else
-                queue.push(inst);
-        }
-    }
+    if (check_all_inputs_ready(inst))
+        post_work(nucl, inst, neck);
 
     return inst;
 }
@@ -358,6 +338,22 @@ bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, s
             handled = true;
     alive.erase(inst);
     return handled;
+}
+
+void post_work(Nucleus& nucl, FrameInstance* inst,
+               std::unordered_map<Substrate*, std::pair<bool, std::queue<FrameInstance*>>>& neck) noexcept {
+    if (!inst->single_threaded)
+        post_work_direct(nucl, inst);
+    else {
+        auto& item = neck[inst->substrate.get()];
+        auto& busy = item.first;
+        auto& queue = item.second;
+        if (!busy) {
+            post_work_direct(nucl, inst);
+            busy = true;
+        } else
+            queue.push(inst);
+    }
 }
 
 void callbacker(Nucleus& nucl) noexcept {
