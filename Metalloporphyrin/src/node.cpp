@@ -15,9 +15,13 @@ void freeNode(VSNodeRef* node) noexcept {
     delete node;
 }
 
+static std::mutex starting_mutex;
+
 void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* userData) noexcept {
-    if (!node->nucl.is_reacting())
+    if (!node->nucl.is_reacting()) {
+        std::lock_guard<std::mutex> guard(starting_mutex);
         node->nucl.react();
+    }
     if (!node->output)
         node->nucl.create_output(node->substrate.get(), node->output.put());
     node->output->get_frame(n, [=](const catsyn::IFrame* frame, std::exception_ptr exc) {
@@ -29,8 +33,10 @@ void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* u
 }
 
 const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) noexcept {
-    if (!node->nucl.is_reacting())
+    if (!node->nucl.is_reacting()) {
+        std::lock_guard<std::mutex> guard(starting_mutex);
         node->nucl.react();
+    }
     if (!node->output)
         node->nucl.create_output(node->substrate.get(), node->output.put());
     std::condition_variable cv;
