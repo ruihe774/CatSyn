@@ -6,16 +6,13 @@
 #include <stdexcept>
 #include <thread>
 #include <vector>
+#include <semaphore>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
 #include <boost/lockfree/queue.hpp>
 
 #include <fmt/format.h>
-
-#ifdef _WIN32
-#include <Windows.h>
-#endif
 
 #define CAT_IMPL
 
@@ -63,24 +60,12 @@ class Thread final : public std::thread {
         : std::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
-class Semaphore {
-#ifdef _WIN32
-    HANDLE h;
-#endif
-  public:
-    explicit Semaphore(unsigned initial = 0, unsigned max = 0);
-    ~Semaphore();
-
-    void acquire();
-    void release();
-
-    Semaphore(const Semaphore&) = delete;
-    Semaphore& operator=(const Semaphore&) = delete;
-};
+using Semaphore = std::counting_semaphore<std::numeric_limits<int>::max()>;
+using BinarySemaphore = std::binary_semaphore;
 
 class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
-    mutable Semaphore semaphore;
+    mutable BinarySemaphore semaphore;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
     std::atomic_bool stop;
@@ -185,11 +170,11 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     std::vector<Thread> worker_threads;
     std::optional<Thread> maintainer_thread;
     std::optional<Thread> callback_thread;
-    Semaphore work_semaphore;
+    Semaphore work_semaphore{0};
     boost::lockfree::queue<FrameInstance*> work_queue{128};
-    Semaphore maintain_semaphore{0, 1};
+    BinarySemaphore maintain_semaphore{0};
     boost::lockfree::queue<MaintainTask> maintain_queue{128};
-    Semaphore callback_semaphore{0, 1};
+    BinarySemaphore callback_semaphore{0};
     boost::lockfree::queue<CallbackTask> callback_queue{128};
 
     Nucleus();

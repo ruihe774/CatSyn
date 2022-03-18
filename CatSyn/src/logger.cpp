@@ -6,6 +6,8 @@
 
 #ifdef _WIN32
 
+#include <Windows.h>
+
 [[noreturn]] void throw_system_error() {
     throw std::system_error(static_cast<int>(GetLastError()), std::system_category());
 }
@@ -101,7 +103,7 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
     write_err(buf, fmt::format_to_n(buf, sizeof(buf), "{}{}{}\t{}\n", color, prompt, clear, msg).out - buf);
 }
 
-static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue, Semaphore& semaphore,
+static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue, BinarySemaphore& semaphore,
                        ILogSink* const& sink, const std::atomic_bool& stop) noexcept {
     bool enable_ascii_escape = check_support_ascii_escape();
     auto f = [&](uintptr_t record) {
@@ -121,7 +123,7 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
 }
 
 Logger::Logger()
-    : semaphore(0, 1), filter_level(LogLevel::DEBUG), stop(false),
+    : semaphore(0), filter_level(LogLevel::DEBUG), stop(false),
       thread(log_worker, std::ref(queue), std::ref(semaphore), std::cref(*sink.addressof()), std::cref(stop)) {
     set_thread_priority(thread, -1, false);
 }

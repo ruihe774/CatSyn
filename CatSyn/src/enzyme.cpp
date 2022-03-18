@@ -7,6 +7,8 @@
 
 #include <catimpl.h>
 
+#include <Windows.h>
+
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 static std::filesystem::path get_current_dll_filename() noexcept {
