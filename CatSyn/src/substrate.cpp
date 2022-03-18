@@ -144,7 +144,7 @@ void worker(Nucleus& nucl) noexcept {
             cat_ptr<const IFrame> product;
             try {
                 inst->substrate->filters[std::this_thread::get_id()]->process_frame(
-                    inst->frame_idx, input_frames.data(), reinterpret_cast<const FrameSource*>(inst->inputs.data()),
+                    inst->frame_idx, input_frames.data(), *reinterpret_cast<const FrameSource*const*>(inst->inputs.data()),
                     inst->inputs.size() - inst->false_dep, product.put_const());
             } catch (...) {
                 post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));

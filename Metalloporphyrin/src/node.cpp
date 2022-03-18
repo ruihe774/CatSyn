@@ -77,7 +77,7 @@ struct VSFrameContext {
 }
 
 const VSFrameRef* getFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept {
-    auto input_frames = std::get<VSFrameContext::input_map>(frameCtx->frames);
+    auto& input_frames = std::get<VSFrameContext::input_map>(frameCtx->frames);
     if (auto it = input_frames.find(catsyn::FrameSource{node->substrate.get(), static_cast<size_t>(n)});
         it != input_frames.end())
         return new VSFrameRef{it->second};
@@ -205,7 +205,7 @@ const catsyn::FrameSource* VSFilter::get_frame_dependency(size_t frame_idx, size
     getFrame(static_cast<int>(frame_idx), arInitial, &instanceData, &frameData, &ctx, core, &api);
     if (ctx.error)
         throw_filter_error(ctx.error);
-    auto frames = std::get<VSFrameContext::request_container>(ctx.frames);
+    auto& frames = std::get<VSFrameContext::request_container>(ctx.frames);
     *len = frames.size();
     return frames.data();
 }
@@ -214,7 +214,7 @@ void VSFilter::process_frame(size_t frame_idx, const catsyn::IFrame* const* inpu
                              const catsyn::FrameSource* sources, size_t source_count, const catsyn::IFrame** out) {
     ctx.frames = VSFrameContext::input_map{};
     ctx.error = nullptr;
-    auto frames = std::get<VSFrameContext::input_map>(ctx.frames);
+    auto& frames = std::get<VSFrameContext::input_map>(ctx.frames);
     for (size_t i = 0; i < source_count; ++i)
         frames.emplace(sources[i], input_frames[i]);
     auto frame_ref = const_cast<VSFrameRef*>(

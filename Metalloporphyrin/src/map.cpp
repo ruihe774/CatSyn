@@ -341,7 +341,7 @@ VSFuncRef* propGetFunc(const VSMap* map, const char* key, int index, int* error)
 int propSetNode(VSMap* map, const char* key, VSNodeRef* node, int append) noexcept {
     if (append == paTouch)
         return 0;
-    if (append == paAppend) {
+    if (append == paAppend && map->view.get<catsyn::IObject>(key)) {
         logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetNode)");
         return 1;
     }
@@ -352,7 +352,7 @@ int propSetNode(VSMap* map, const char* key, VSNodeRef* node, int append) noexce
 int propSetFrame(VSMap* map, const char* key, const VSFrameRef* f, int append) noexcept {
     if (append == paTouch)
         return 0;
-    if (append == paAppend) {
+    if (append == paAppend && map->view.get<catsyn::IObject>(key)) {
         logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetFrame)");
         return 1;
     }
@@ -363,7 +363,7 @@ int propSetFrame(VSMap* map, const char* key, const VSFrameRef* f, int append) n
 int propSetFunc(VSMap* map, const char* key, VSFuncRef* func, int append) noexcept {
     if (append == paTouch)
         return 0;
-    if (append == paAppend) {
+    if (append == paAppend && map->view.get<catsyn::IObject>(key)) {
         logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetFunc)");
         return 1;
     }
