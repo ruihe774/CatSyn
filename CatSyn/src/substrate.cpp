@@ -135,7 +135,7 @@ void worker(Nucleus& nucl) noexcept {
             std::unique_lock<std::mutex> lock(inst->processing_mutex, std::try_to_lock);
             if (!lock.owns_lock() || inst->product)
                 return;
-            boost::container::small_vector<const IFrame*, 13> input_frames;
+            boost::container::small_vector<const IFrame*, 12> input_frames;
             for (auto input : inst->inputs) {
 #ifndef NDEBUG
                 if (!input->product)
@@ -303,7 +303,10 @@ FrameInstance* construct(Nucleus& nucl,
                 substrate->filters.emplace(id, promoter.clone());
 
     size_t len = 0;
-    auto deps = promoter->get_frame_dependency(frame_idx, &len);
+    auto pdeps = promoter->get_frame_dependency(frame_idx, &len);
+    boost::container::small_vector<FrameSource, 12> deps;
+    deps.reserve(len);
+    deps.insert(deps.end(), pdeps, pdeps + len);
     auto instc = std::make_unique<FrameInstance>(substrate, frame_idx);
     for (size_t i = 0; i < len; ++i) {
         auto dep = deps[i];
