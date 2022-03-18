@@ -2,7 +2,6 @@
 
 #include <array>
 #include <atomic>
-#include <shared_mutex>
 #include <optional>
 #include <stdexcept>
 #include <thread>
