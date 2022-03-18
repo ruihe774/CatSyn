@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <string>
 
 #include <string.h>
@@ -25,78 +26,81 @@ struct VSEnzyme final : public Object, public catsyn::IEnzyme {
 
     VSEnzyme(catsyn::INucleus& nucl, const char* path) noexcept : path(path), funcs(nullptr) {
         nucl.get_factory()->create_table(0, funcs.table.put());
+#ifdef _WIN32
+        std::replace(this->path.begin(), this->path.end(), '\\', '/');
+#endif
     }
 };
 
-static std::vector<catsyn::ArgSpec> args_vs_to_cs(VSPlugin* plugin, const char* args) {
-    std::vector<catsyn::ArgSpec> specs;
-    auto len = strlen(args);
-    memcpy_s(plugin->pargs, sizeof(VSPlugin::args_buf) - (plugin->pargs - plugin->args_buf), args, len + 1);
-    auto p = plugin->pargs;
-    plugin->pargs += len + 1;
-    auto s = p;
-    int phase = 0;
-    const char* name;
-    const std::type_info* ti;
-    bool required;
-    for (;; ++p) {
-        auto ch = *p;
-        switch (ch) {
-        case ':':
-        case ';':
-        case '[':
-        case '\0':
-            *p = '\0';
-            switch (phase) {
-            case 0:
-                name = s;
-                required = true;
-                break;
-            case 1:
-                if (strcmp(s, "int") == 0 || strcmp(s, "float") == 0)
-                    ti = &typeid(catsyn::INumberArray);
-                else if (strcmp(s, "data") == 0)
-                    ti = &typeid(catsyn::IBytes);
-                else if (strcmp(s, "clip") == 0)
-                    ti = &typeid(catsyn::ISubstrate);
-                else if (strcmp(s, "frame") == 0)
-                    ti = &typeid(catsyn::IFrame);
-                else if (strcmp(s, "func") == 0)
-                    ti = &typeid(catsyn::IFunction);
-                else
-                    throw std::invalid_argument("unknown argument type");
-                break;
-            case 2:
-                if (strcmp(s, "opt") == 0)
-                    required = false;
-                break;
-            }
-            if (ch == '[') {
-                p += 2;
-                if (*p == ':')
-                    phase = 2;
-                else {
-                    specs.push_back(catsyn::ArgSpec{name, *ti, required});
-                    phase = 0;
-                }
-            } else if (ch == ':')
-                ++phase;
-            else if (phase) {
-                specs.push_back(catsyn::ArgSpec{name, *ti, required});
-                phase = 0;
-            }
-            s = p + 1;
-        }
-        if (ch == '\0')
-            break;
-    }
-    return specs;
-}
+//static std::vector<catsyn::ArgSpec> args_vs_to_cs(VSPlugin* plugin, const char* args) {
+//    std::vector<catsyn::ArgSpec> specs;
+//    auto len = strlen(args);
+//    memcpy_s(plugin->pargs, sizeof(VSPlugin::args_buf) - (plugin->pargs - plugin->args_buf), args, len + 1);
+//    auto p = plugin->pargs;
+//    plugin->pargs += len + 1;
+//    auto s = p;
+//    int phase = 0;
+//    const char* name;
+//    const std::type_info* ti;
+//    bool required;
+//    for (;; ++p) {
+//        auto ch = *p;
+//        switch (ch) {
+//        case ':':
+//        case ';':
+//        case '[':
+//        case '\0':
+//            *p = '\0';
+//            switch (phase) {
+//            case 0:
+//                name = s;
+//                required = true;
+//                break;
+//            case 1:
+//                if (strcmp(s, "int") == 0 || strcmp(s, "float") == 0)
+//                    ti = &typeid(catsyn::INumberArray);
+//                else if (strcmp(s, "data") == 0)
+//                    ti = &typeid(catsyn::IBytes);
+//                else if (strcmp(s, "clip") == 0)
+//                    ti = &typeid(catsyn::ISubstrate);
+//                else if (strcmp(s, "frame") == 0)
+//                    ti = &typeid(catsyn::IFrame);
+//                else if (strcmp(s, "func") == 0)
+//                    ti = &typeid(catsyn::IFunction);
+//                else
+//                    throw std::invalid_argument("unknown argument type");
+//                break;
+//            case 2:
+//                if (strcmp(s, "opt") == 0)
+//                    required = false;
+//                break;
+//            }
+//            if (ch == '[') {
+//                p += 2;
+//                if (*p == ':')
+//                    phase = 2;
+//                else {
+//                    specs.push_back(catsyn::ArgSpec{name, *ti, required});
+//                    phase = 0;
+//                }
+//            } else if (ch == ':')
+//                ++phase;
+//            else if (phase) {
+//                specs.push_back(catsyn::ArgSpec{name, *ti, required});
+//                phase = 0;
+//            }
+//            s = p + 1;
+//        }
+//        if (ch == '\0')
+//            break;
+//    }
+//    return specs;
+//}
 
 void registerFunction(const char* name, const char* args, VSPublicFunction argsFunc, void* functionData,
                       VSPlugin* plugin) noexcept {
     auto vse = plugin->enzyme.query<VSEnzyme>();
-    vse->funcs.set(name, new VSFunc{plugin->core, argsFunc, functionData, nullptr, args_vs_to_cs(plugin, args)});
+    vse->funcs.set(name, new VSFunc{plugin->core, argsFunc, functionData, nullptr, std::nullopt});
     plugin->arg_strs[name] = args;
 }
 
@@ -207,13 +211,12 @@ const char* VSRibosome::get_identifier() const noexcept {
     throw std::runtime_error("insufficient buffer");
 }
 
-static size_t u2w(const char* s, const size_t len, const wchar_t** out) noexcept {
+static wchar_t* u2w(const char* s) noexcept {
     thread_local wchar_t wbuf[2048];
-    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, static_cast<int>(len), wbuf, sizeof(wbuf));
+    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, wbuf, sizeof(wbuf));
     if (wlen == 0)
         insufficient_buffer();
-    *out = &wbuf[0];
-    return wlen;
+    return wbuf;
 }
 
 void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noexcept {
@@ -223,9 +226,7 @@ void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noe
         //  boost::dll::shared_library lib(token + 4);
         //  auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
         // TODO: why boost fails?
-        const wchar_t* wname;
-        u2w(token + 4, strlen(token + 4), &wname);
-        auto lib = LoadLibraryW(wname);
+        auto lib = LoadLibraryExW(u2w(token + 4), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
         if (!lib)
             return;
         auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));

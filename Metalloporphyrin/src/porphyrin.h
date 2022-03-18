@@ -54,8 +54,8 @@ void logMessage(int mt, const char* msg) noexcept;
 struct VSPlugin {
     VSCore* core;
     catsyn::cat_ptr<catsyn::IEnzyme> enzyme;
-    char args_buf[4096];
-    char* pargs{args_buf};
+//    char args_buf[4096];
+//    char* pargs{args_buf};
     // I'm sleepy
     std::map<std::string, std::string> arg_strs;
 };

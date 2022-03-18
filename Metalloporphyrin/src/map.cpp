@@ -1,3 +1,5 @@
+#include <fmt/format.h>
+
 #include <porphyrin.h>
 
 VSMap::VSMap(const catsyn::ITable* table) noexcept : view(table) {}
@@ -37,9 +39,10 @@ void setError(VSMap* map, const char* errorMessage) noexcept {
 }
 
 const char* getError(const VSMap* map) noexcept {
-    if (auto msg = map->view.get<catsyn::IBytes>("__error"); msg)
-        return static_cast<const char*>(msg->data());
-    else
+    // leak
+    if (auto msg = map->view.get<catsyn::IBytes>("__error"); msg) {
+        return strdup(static_cast<const char*>(msg->data()));
+    } else
         return nullptr;
 }
 
@@ -54,8 +57,8 @@ const char* propGetKey(const VSMap* map, int index) noexcept {
 int propDeleteKey(VSMap* map, const char* key) noexcept {
     int exists = !!map->view.get<catsyn::IObject>(key);
     map->get_mut().del(key);
-    if (exists)
-        logMessage(mtWarning, "Metalloporphyrin: hole left (propDeleteKey)");
+//    if (exists)
+//        logMessage(mtWarning, "Metalloporphyrin: hole left (propDeleteKey)");
     return exists;
 }
 
@@ -76,17 +79,41 @@ char propGetType(const VSMap* map, const char* key) noexcept {
     return ptUnset;
 }
 
+[[noreturn]] static void insufficient_buffer() {
+    throw std::runtime_error("insufficient buffer");
+}
+
+template<typename... Args> const char* format_c(fmt::format_string<Args...> fmt, Args&&... args) noexcept {
+    thread_local char buf[4096];
+    auto size = fmt::format_to_n(buf, sizeof(buf) - 1, std::move(fmt), std::forward<Args>(args)...).size;
+    if (size >= sizeof(buf))
+        insufficient_buffer();
+    buf[size] = 0;
+    return buf;
+}
+
 int propNumElements(const VSMap* map, const char* key) noexcept {
     auto val = map->view.get<catsyn::IObject>(key);
     if (!val)
         return -1;
     if (auto arr = val.try_query<const catsyn::INumberArray>(); arr)
         return arr->size() / 8;
-    else
+    else if (val.try_query<const catsyn::ISubstrate>() || val.try_query<const catsyn::IBytes>()) {
+        auto table = map->view.table;
+        for (unsigned i = 1; ; ++i) {
+            auto nk = format_c("__{}{}", key, i);
+            auto ref = table->get_ref(nk);
+            if (ref == catsyn::ITable::npos) {
+                return i;
+            }
+        }
+    } else
         return 1;
 }
 
 static const catsyn::INumberArray* propGetIntArrayImpl(const VSMap* map, const char* key, int* error) noexcept {
+    if (error)
+        *error = 0;
     auto val = map->view.get<catsyn::IObject>(key);
     if (!val) {
         *error = peUnset;
@@ -106,6 +133,8 @@ const int64_t* propGetIntArray(const VSMap* map, const char* key, int* error) no
 }
 
 static const catsyn::INumberArray* propGetFloatArrayImpl(const VSMap* map, const char* key, int* error) noexcept {
+    if (error)
+        *error = 0;
     auto val = map->view.get<catsyn::IObject>(key);
     if (!val) {
         *error = peUnset;
@@ -125,6 +154,8 @@ const double* propGetFloatArray(const VSMap* map, const char* key, int* error) n
 }
 
 int64_t propGetInt(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     auto arr = propGetIntArrayImpl(map, key, error);
     if (!arr)
         return 0;
@@ -136,6 +167,8 @@ int64_t propGetInt(const VSMap* map, const char* key, int index, int* error) noe
 }
 
 double propGetFloat(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     auto arr = propGetFloatArrayImpl(map, key, error);
     if (!arr)
         return 0;
@@ -147,9 +180,10 @@ double propGetFloat(const VSMap* map, const char* key, int index, int* error) no
 }
 
 static const catsyn::IBytes* propGetDataImpl(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     if (index) {
-        *error = peIndex;
-        return nullptr;
+        key = format_c("__{}{}", key, index);
     }
     auto val = map->view.get<catsyn::IObject>(key);
     if (!val) {
@@ -256,8 +290,14 @@ int propSetData(VSMap* map, const char* key, const char* data, int size, int app
         if (bytes && append == paTouch)
             return 0;
         if (bytes && append == paAppend) {
-            logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetData)");
-            return 1;
+            for (unsigned i = 1; ; ++i) {
+                auto nk = format_c("__{}{}", key, i);
+                auto ref = table.table->get_ref(nk);
+                if (ref == catsyn::ITable::npos) {
+                    key = nk;
+                    break;
+                }
+            }
         }
     } catch (std::bad_cast&) {
         return 1;
@@ -283,9 +323,10 @@ static VSVideoInfo vi_cs_to_vs(catsyn::VideoInfo vi) {
 }
 
 VSNodeRef* propGetNode(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     if (index) {
-        *error = peIndex;
-        return nullptr;
+        key = format_c("__{}{}", key, index);
     }
     auto val = map->view.get<catsyn::IObject>(key);
     if (!val) {
@@ -303,6 +344,8 @@ VSNodeRef* propGetNode(const VSMap* map, const char* key, int index, int* error)
 }
 
 const VSFrameRef* propGetFrame(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     if (index) {
         *error = peIndex;
         return nullptr;
@@ -321,6 +364,8 @@ const VSFrameRef* propGetFrame(const VSMap* map, const char* key, int index, int
 }
 
 VSFuncRef* propGetFunc(const VSMap* map, const char* key, int index, int* error) noexcept {
+    if (error)
+        *error = 0;
     if (index) {
         *error = peIndex;
         return nullptr;
@@ -341,9 +386,19 @@ VSFuncRef* propGetFunc(const VSMap* map, const char* key, int index, int* error)
 int propSetNode(VSMap* map, const char* key, VSNodeRef* node, int append) noexcept {
     if (append == paTouch)
         return 0;
-    if (append == paAppend && map->view.get<catsyn::IObject>(key)) {
-        logMessage(mtWarning, "Metalloporphyrin: paAppend not supported (propSetNode)");
-        return 1;
+    if (append == paAppend) {
+        auto table = map->get_mut().table;
+        auto ref = table->get_ref(key);
+        if (ref != catsyn::ITable::npos) {
+            for (unsigned i = 1; ; ++i) {
+                auto nk = format_c("__{}{}", key, i);
+                ref = table->get_ref(nk);
+                if (ref == catsyn::ITable::npos) {
+                    map->get_mut().set(nk, node->substrate.get());
+                    return 0;
+                }
+            }
+        }
     }
     map->get_mut().set(key, node->substrate.get());
     return 0;
