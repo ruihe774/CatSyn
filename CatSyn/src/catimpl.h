@@ -192,7 +192,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     boost::lockfree::queue<MaintainTask> maintain_queue{128};
     Semaphore callback_semaphore{0, 1};
     boost::lockfree::queue<CallbackTask> callback_queue{128};
-    mutable std::shared_mutex starting_mutex;
 
     Nucleus();
     ~Nucleus() final;
