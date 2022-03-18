@@ -6,6 +6,8 @@ project(VapStd
     DESCRIPTION "Standalone VapourSynth core filters"
 )
 
+include_directories(.)
+
 add_library(vapstd SHARED
     boxblurfilter.cpp
     cpufeatures.cpp
@@ -46,8 +48,16 @@ add_library(vapstd SHARED
     p2p.h
 )
 
-target_sources(vapstd PRIVATE vapstd.cpp)
-
 target_link_libraries(vapstd PRIVATE zimg)
-target_include_directories(vapstd PRIVATE .)
 target_compile_definitions(vapstd PRIVATE VS_CORE_EXPORTS VS_TARGET_OS_WINDOWS VS_TARGET_CPU_X86 _CRT_SECURE_NO_WARNINGS)
+
+add_library(vsstd SHARED VSStd.cpp internalfilters.h)
+target_link_libraries(vsstd PRIVATE vapstd)
+
+add_library(vsresize SHARED VSRez.cpp internalfilters.h)
+target_link_libraries(vsresize PRIVATE vapstd)
+
+add_library(vstext SHARED VSText.cpp internalfilters.h)
+target_link_libraries(vstext PRIVATE vapstd)
+
+install(TARGETS vapstd vsstd vsresize vstext)

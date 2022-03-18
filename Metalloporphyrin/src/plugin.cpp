@@ -203,24 +203,43 @@ const char* VSRibosome::get_identifier() const noexcept {
     return "club.yusyabu.metalloporphyrin.api3";
 }
 
+[[noreturn]] static void insufficient_buffer() {
+    throw std::runtime_error("insufficient buffer");
+}
+
+static size_t u2w(const char* s, const size_t len, const wchar_t** out) noexcept {
+    thread_local wchar_t wbuf[2048];
+    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, static_cast<int>(len), wbuf, sizeof(wbuf));
+    if (wlen == 0)
+        insufficient_buffer();
+    *out = &wbuf[0];
+    return wlen;
+}
+
 void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noexcept {
     *out = nullptr;
-    if (boost::starts_with(token, "dll:"))
-        try {
-//            boost::dll::shared_library lib(token + 4);
-//            auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
-            // TODO: why boost fails?
-            auto lib = LoadLibraryA(token + 4);
-            auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));
-            std::unique_ptr<VSPlugin> vsp(new VSPlugin{core, new VSEnzyme{*core->nucl, token + 4}});
-            init_func(configurePlugin, registerFunction, vsp.get());
-            *out = vsp->enzyme.get();
-            (*out)->add_ref();
-//            loaded.emplace(*out, std::move(lib));
-            std::lock_guard<std::shared_mutex> guard(core->plugins_mutex);
-            core->plugins.emplace_back(std::move(vsp));
-        } catch (boost::dll::fs::system_error&) {
-        }
+    if (boost::starts_with(token, "dll:")) {
+        // try {
+        //  boost::dll::shared_library lib(token + 4);
+        //  auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
+        // TODO: why boost fails?
+        const wchar_t* wname;
+        u2w(token + 4, strlen(token + 4), &wname);
+        auto lib = LoadLibraryW(wname);
+        if (!lib)
+            return;
+        auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));
+        if (!init_func)
+            return;
+        std::unique_ptr<VSPlugin> vsp(new VSPlugin{core, new VSEnzyme{*core->nucl, token + 4}});
+        init_func(configurePlugin, registerFunction, vsp.get());
+        *out = vsp->enzyme.get();
+        (*out)->add_ref();
+        // loaded.emplace(*out, std::move(lib));
+        std::lock_guard<std::shared_mutex> guard(core->plugins_mutex);
+        core->plugins.emplace_back(std::move(vsp));
+        // } catch (boost::dll::fs::system_error&) {}
+    }
 }
 
 [[noreturn]] static void hydrolyze_non_unique() {
