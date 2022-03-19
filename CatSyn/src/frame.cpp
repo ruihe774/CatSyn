@@ -2,14 +2,35 @@
 
 #include <string.h>
 
-#include <mimalloc.h>
+#include <snmalloc.h>
 
 #include <catimpl.h>
 
 class Bytes : public Object, virtual public IBytes, public Shuttle {
+    static void* realloc(void* ptr, size_t size) noexcept {
+        using namespace snmalloc;
+        auto a = ThreadAlloc::get();
+        size_t sz = a->alloc_size(ptr);
+        if (sz >= size)
+            return ptr;
+
+        void* p = a->alloc(size);
+        if (p) {
+            sz = bits::min(size, sz);
+            if (sz != 0)
+                memcpy(p, ptr, sz);
+            a->dealloc(ptr);
+        } else if (size == 0) {
+            a->dealloc(ptr);
+        } else {
+            errno = ENOMEM;
+        }
+        return p;
+    }
+
   public:
     Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = mi_new(len);
+        this->buf = snmalloc::ThreadAlloc::get()->alloc(len);
         this->len = len;
         this->nucl.alloc_stat.alloc(len);
         if (data)
@@ -17,7 +38,7 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
     }
 
     ~Bytes() override {
-        mi_free(this->buf);
+        snmalloc::ThreadAlloc::get()->dealloc(this->buf);
         this->nucl.alloc_stat.free(len);
     }
 
@@ -26,7 +47,7 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
     }
 
     void realloc(size_t new_size) noexcept final {
-        this->buf = mi_new_realloc(this->buf, new_size);
+        this->buf = realloc(this->buf, new_size);
         this->len = new_size;
     }
 };
@@ -34,15 +55,22 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
 class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
   public:
     AlignedBytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = mi_new_aligned(len, static_cast<size_t>(alignment));
+        this->buf = snmalloc::ThreadAlloc::get()->alloc(snmalloc::aligned_size(static_cast<size_t>(alignment), len));
+#ifdef __clang__
+        auto buf = __builtin_assume_aligned(this->buf, static_cast<size_t>(alignment));
+#endif
         this->len = len;
         this->nucl.alloc_stat.alloc(len);
         if (data)
+#ifdef __clang__
+            __builtin_mempcpy(buf, data, len);
+#else
             memcpy(this->buf, data, len);
+#endif
     }
 
     ~AlignedBytes() final {
-        mi_free_aligned(this->buf, static_cast<size_t>(alignment));
+        snmalloc::ThreadAlloc::get()->dealloc(this->buf);
         this->nucl.alloc_stat.free(len);
     }
 

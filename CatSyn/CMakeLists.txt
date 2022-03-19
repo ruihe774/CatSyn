@@ -30,7 +30,7 @@ target_sources(catsyn PUBLIC
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(catsyn PRIVATE mimalloc)
+target_link_libraries(catsyn PRIVATE mimalloc snmalloc_lib)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
     Boost::algorithm

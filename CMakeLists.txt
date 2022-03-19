@@ -12,6 +12,8 @@ include(install_pdb.cmake)
 
 include(mimalloc.cmake)
 
+add_subdirectory(snmalloc EXCLUDE_FROM_ALL)
+
 add_subdirectory(boost EXCLUDE_FROM_ALL)
 
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
