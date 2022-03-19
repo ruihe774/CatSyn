@@ -7,18 +7,17 @@
 
 struct FrameInstance {
     const cat_ptr<Substrate> substrate;
-    const size_t frame_idx;
     cat_ptr<const IFrame> product;
     boost::container::small_vector<FrameInstance*, 10> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
     std::unique_ptr<IOutput::Callback> callback;
-    void* frame_data;
+    FrameData* frame_data;
     std::atomic_flag taken;
     bool false_dep;
     bool single_threaded;
 
-    FrameInstance(Substrate* substrate, size_t frame_idx) noexcept
-        : substrate(substrate), frame_idx(frame_idx), false_dep(false), single_threaded(false) {}
+    FrameInstance(Substrate* substrate, FrameData* frame_data) noexcept
+        : substrate(substrate), frame_data(frame_data), false_dep(false), single_threaded(false) {}
 };
 
 static std::thread::id position_zero;
@@ -132,19 +131,12 @@ void worker(Nucleus& nucl) noexcept {
             if (inst->taken.test_and_set(std::memory_order_acq_rel))
                 return;
             boost::container::small_vector<const IFrame*, 12> input_frames;
-            for (auto input : inst->inputs) {
-#ifndef NDEBUG
-                if (!input->product)
-                    bug();
-#endif
+            for (auto input : inst->inputs)
                 input_frames.push_back(input->product.get());
-            }
             cat_ptr<const IFrame> product;
             try {
                 inst->substrate->filters[std::this_thread::get_id()]->process_frame(
-                    inst->frame_idx, input_frames.data(),
-                    reinterpret_cast<const FrameSource* const*>(inst->inputs.data()),
-                    inst->inputs.size() - inst->false_dep, inst->frame_data, product.put_const());
+                    input_frames.data(), inst->frame_data, product.put_const());
             } catch (...) {
                 post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));
                 return;
@@ -291,16 +283,11 @@ FrameInstance* construct(Nucleus& nucl,
             if (auto id = thread.get_id(); !substrate->filters.contains(id))
                 substrate->filters.emplace(id, promoter.clone());
 
-    void* frame_data = nullptr;
-    size_t len = 0;
-    auto pdeps = promoter->get_frame_dependency(frame_idx, &len, &frame_data);
-    boost::container::small_vector<FrameSource, 12> deps;
-    deps.reserve(len);
-    deps.insert(deps.end(), pdeps, pdeps + len);
-    auto instc = std::make_unique<FrameInstance>(substrate, frame_idx);
-    instc->frame_data = frame_data;
-    for (size_t i = 0; i < len; ++i) {
-        auto dep = deps[i];
+    FrameData* frame_data = nullptr;
+    promoter->get_frame_data(frame_idx, &frame_data);
+    auto instc = std::make_unique<FrameInstance>(substrate, frame_data);
+    for (size_t i = 0; i < frame_data->dependency_count; ++i) {
+        auto dep = frame_data->dependencies[i];
         auto input = construct(nucl, instances, alive, neck,
                                &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx);
         instc->inputs.emplace_back(input);

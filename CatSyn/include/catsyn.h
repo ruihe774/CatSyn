@@ -215,6 +215,7 @@ class IFactory : virtual public IRef {
 };
 
 struct ArgSpec {
+    // TODO: need to revise
     const char* name;
     const std::type_info& type;
     bool required;
@@ -235,24 +236,28 @@ class ISubstrate : virtual public IRef {
     virtual INucleus* get_nucleus() noexcept = 0;
 };
 
-struct FrameSource {
-    const ISubstrate* substrate;
-    size_t frame_idx;
-};
-
 enum FilterFlags {
     ffNormal = 0,
     ffMakeLinear = 4,
     ffSingleThreaded = 8,
 };
 
+struct FrameSource {
+    const ISubstrate* substrate;
+    size_t frame_idx;
+};
+
+struct FrameData {
+    const FrameSource* dependencies;
+    size_t dependency_count;
+};
+
 class IFilter : virtual public IObject {
   public:
     virtual FilterFlags get_filter_flags() const noexcept = 0;
     virtual VideoInfo get_video_info() const noexcept = 0;
-    virtual const FrameSource* get_frame_dependency(size_t frame_idx, size_t* len, void** frame_data) noexcept = 0;
-    virtual void process_frame(size_t frame_idx, const IFrame* const* input_frames, const FrameSource* const* sources,
-                               size_t source_count, void* frame_data, const IFrame** out) = 0;
+    virtual void get_frame_data(size_t frame_idx, FrameData** frame_data) noexcept = 0;
+    virtual void process_frame(const IFrame* const* input_frames, FrameData* frame_data_move_in, const IFrame** out) = 0;
 };
 
 class IOutput : virtual public IRef {
@@ -299,6 +304,8 @@ class INucleus : virtual public IRef {
 
 CAT_API void create_nucleus(INucleus** out) noexcept;
 CAT_API Version get_version() noexcept;
+
+// TODO: it doesn't work
 CAT_API const char* exception_ptr_what(std::exception_ptr excptr) noexcept;
 
 } // namespace catsyn
