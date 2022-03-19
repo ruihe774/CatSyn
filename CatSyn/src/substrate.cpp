@@ -15,9 +15,10 @@ struct FrameInstance {
     std::atomic_flag taken;
     bool false_dep;
     bool single_threaded;
+    unsigned indulgence;
 
     FrameInstance(Substrate* substrate, FrameData* frame_data) noexcept
-        : substrate(substrate), frame_data(frame_data), false_dep(false), single_threaded(false) {}
+        : substrate(substrate), frame_data(frame_data), false_dep(false), single_threaded(false), indulgence(0) {}
 };
 
 static std::thread::id position_zero;
@@ -168,7 +169,9 @@ static FrameInstance*
 construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
-          Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
+          std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
+          Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {},
+          bool missed = false) noexcept;
 
 static bool kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
 
@@ -180,6 +183,8 @@ void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
     std::unordered_set<FrameInstance*> alive;
     std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>> neck;
+    std::unordered_set<std::pair<Substrate*, size_t>> history;
+    std::unordered_map<Substrate*, unsigned> miss;
     uint8_t gc_tick = 0;
     while (true) {
         nucl.maintain_semaphore.acquire();
@@ -220,7 +225,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
-                construct(nucl, instances, alive, neck, substrate, frame_idx,
+                construct(nucl, instances, alive, neck, history, miss, substrate, frame_idx,
                           std::unique_ptr<IOutput::Callback>(callback));
                 break;
             }
@@ -234,29 +239,27 @@ void maintainer(Nucleus& nucl) noexcept {
                 }
         });
 
-        if (++gc_tick == 0) // XXX: UB?
-            if (auto before = nucl.alloc_stat.get_current();
-                before > static_cast<size_t>(nucl.config.mem_hint_mb) << 20) {
-                size_t destroy_count = 0;
-                for (auto it = instances.begin(); it != instances.end();) {
-                    auto inst = it->second.get();
-                    if (!inst->product || inst->callback || inst->single_threaded)
+        if (++gc_tick == 0) { // XXX: UB?
+            for (auto it = instances.begin(); it != instances.end();) {
+                auto inst = it->second.get();
+                if (!inst->product || inst->callback || inst->single_threaded)
+                    goto next;
+                for (auto output : inst->outputs)
+                    if (alive.find(output) != alive.end() && !output->product)
                         goto next;
-                    for (auto output : inst->outputs)
-                        if (alive.find(output) != alive.end() && !output->product)
-                            goto next;
-                    it = instances.erase(it);
-                    alive.erase(inst);
-                    ++destroy_count;
-                    continue;
-                next:
-                    ++it;
-                }
-                auto after = nucl.alloc_stat.get_current();
-                nucl.logger.log(LogLevel::DEBUG,
-                                format_c("Nucleus: lysosome triggered ({} frames collected; before: {}MB, after: {}MB)",
-                                         destroy_count, before >> 20, after >> 20));
+                if (inst->indulgence--)
+                    goto next;
+                it = instances.erase(it);
+                alive.erase(inst);
+                continue;
+            next:
+                ++it;
             }
+            if (history.size() > 65535) {
+                nucl.logger.log(LogLevel::DEBUG, "Nucleus: history forgotten");
+                history.clear();
+            }
+        }
     }
 }
 
@@ -264,7 +267,9 @@ FrameInstance* construct(Nucleus& nucl,
                          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
                          std::unordered_set<FrameInstance*>& alive,
                          std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
-                         Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback) noexcept {
+                         std::unordered_set<std::pair<Substrate*, size_t>>& history,
+                         std::unordered_map<Substrate*, unsigned>& miss, Substrate* substrate, size_t frame_idx,
+                         std::unique_ptr<IOutput::Callback> callback, bool missed) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end()) {
         auto inst = it->second.get();
@@ -276,6 +281,13 @@ FrameInstance* construct(Nucleus& nucl,
         }
         return inst;
     }
+    if (auto it = history.find(key); it != history.end() && !missed) {
+        nucl.logger.log(LogLevel::DEBUG, format_c("Nucleus: frame {} of substrate {} need to recalculate", frame_idx,
+                                                  static_cast<void*>(substrate)));
+        missed = true;
+        ++miss[substrate];
+    } else
+        history.emplace(key);
 
     auto promoter = substrate->filters.find(position_zero)->second;
     if (substrate->filters.size() == 1)
@@ -288,8 +300,9 @@ FrameInstance* construct(Nucleus& nucl,
     auto instc = std::make_unique<FrameInstance>(substrate, frame_data);
     for (size_t i = 0; i < frame_data->dependency_count; ++i) {
         auto dep = frame_data->dependencies[i];
-        auto input = construct(nucl, instances, alive, neck,
-                               &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx);
+        auto input = construct(nucl, instances, alive, neck, history, miss,
+                               &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx,
+                               nullptr, missed);
         instc->inputs.emplace_back(input);
         input->outputs.emplace_back(instc.get());
     }
@@ -304,6 +317,9 @@ FrameInstance* construct(Nucleus& nucl,
         }
     if (ff & ffSingleThreaded)
         instc->single_threaded = true;
+
+    if (auto it = miss.find(substrate); it != miss.end())
+        instc->indulgence = it->second / 8;
 
     instc->callback = std::move(callback);
     auto inst = instances.emplace(key, std::move(instc)).first->second.get();
