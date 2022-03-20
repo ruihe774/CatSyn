@@ -206,6 +206,7 @@ void maintainer(Nucleus& nucl) noexcept {
     auto last_gc = std::chrono::steady_clock::now();
     size_t last_bubble = 0;
     while (true) {
+        bool constructed = false;
         nucl.maintain_semaphore.acquire();
         if (nucl.stop.load(std::memory_order_acquire))
             break;
@@ -246,6 +247,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
                 construct(nucl, tick, instances, alive, neck, history, miss, substrate, frame_idx,
                           std::unique_ptr<IOutput::Callback>(callback));
+                constructed = true;
                 break;
             }
             }
@@ -257,8 +259,8 @@ void maintainer(Nucleus& nucl) noexcept {
                     sec.first = true;
                 }
         });
-
-        if (++tick % 256 == 0) {
+        ++tick;
+        if (constructed) {
             for (auto it = instances.begin(); it != instances.end();) {
                 auto inst = it->second.get();
                 if (!inst->product || inst->callback || inst->single_threaded)
