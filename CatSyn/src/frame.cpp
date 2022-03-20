@@ -32,14 +32,14 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
     Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
         this->buf = snmalloc::ThreadAlloc::get()->alloc(len);
         this->len = len;
-        this->nucl.alloc_stat.alloc(len);
+        this->nucl.accountant.mem += len;
         if (data)
             memcpy(this->buf, data, len);
     }
 
     ~Bytes() override {
         snmalloc::ThreadAlloc::get()->dealloc(this->buf);
-        this->nucl.alloc_stat.free(len);
+        this->nucl.accountant.mem -= this->len;
     }
 
     void clone(IObject** out) const noexcept final {
@@ -47,8 +47,9 @@ class Bytes : public Object, virtual public IBytes, public Shuttle {
     }
 
     void realloc(size_t new_size) noexcept final {
+        this->nucl.accountant.mem -= this->len;
         this->buf = realloc(this->buf, new_size);
-        this->len = new_size;
+        this->nucl.accountant.mem += this->len = new_size;
     }
 };
 
@@ -60,7 +61,7 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
         auto buf = __builtin_assume_aligned(this->buf, static_cast<size_t>(alignment));
 #endif
         this->len = len;
-        this->nucl.alloc_stat.alloc(len);
+        this->nucl.accountant.mem += len;
         if (data)
 #ifdef __clang__
             __builtin_mempcpy(buf, data, len);
@@ -71,7 +72,7 @@ class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
 
     ~AlignedBytes() final {
         snmalloc::ThreadAlloc::get()->dealloc(this->buf);
-        this->nucl.alloc_stat.free(len);
+        this->nucl.accountant.mem -= this->len;
     }
 
     void clone(IObject** out) const noexcept final {
@@ -100,19 +101,6 @@ void Nucleus::create_aligned_bytes(const void* data, size_t len, IAlignedBytes**
 
 void Nucleus::create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept {
     create_instance<NumberArray>(out, *this, sample_type, data, len);
-}
-
-void Nucleus::AllocStat::alloc(size_t size) noexcept {
-    current.fetch_add(size, std::memory_order_relaxed);
-}
-
-void Nucleus::AllocStat::free(size_t size) noexcept {
-    current.fetch_sub(size, std::memory_order_relaxed);
-}
-
-size_t Nucleus::AllocStat::get_current() const noexcept {
-    // precision is not important
-    return current.load(std::memory_order_relaxed);
 }
 
 class Frame final : public Object, public IFrame, public Shuttle {

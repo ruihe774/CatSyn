@@ -24,10 +24,10 @@ Nucleus::Nucleus() {
     enzymes = decltype(enzymes)(t.query<Table>());
 }
 
-Nucleus::AllocStat::~AllocStat() {
-    if (auto cur = get_current(); cur != 0)
+Nucleus::Accountant::~Accountant() {
+    if (mem != 0)
         // this is dirty
-        (reinterpret_cast<Logger*>(this) - 1)->log(LogLevel::WARNING, format_c("Nucleus: {}B memory not freed!", cur));
+        (reinterpret_cast<Logger*>(this) - 1)->log(LogLevel::WARNING, format_c("Nucleus: {}B memory not freed!", mem));
 }
 
 IFactory* Nucleus::get_factory() noexcept {

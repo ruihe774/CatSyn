@@ -125,7 +125,10 @@ static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
 
 void worker(Nucleus& nucl) noexcept {
     while (true) {
+        auto wait_start = std::chrono::steady_clock::now();
         nucl.work_semaphore.acquire();
+        auto wait_end = std::chrono::steady_clock::now();
+        nucl.accountant.bubble += std::chrono::duration_cast<std::chrono::nanoseconds>(wait_end - wait_start).count();
         if (nucl.stop.load(std::memory_order_acquire))
             break;
         nucl.work_queue.consume_one([&](FrameInstance* inst) {
@@ -186,6 +189,8 @@ void maintainer(Nucleus& nucl) noexcept {
     std::unordered_set<std::pair<Substrate*, size_t>> history;
     std::unordered_map<Substrate*, unsigned> miss;
     uint8_t gc_tick = 0;
+    auto last_gc = std::chrono::steady_clock::now();
+    size_t last_bubble = 0;
     while (true) {
         nucl.maintain_semaphore.acquire();
         if (nucl.stop.load(std::memory_order_acquire))
@@ -259,6 +264,16 @@ void maintainer(Nucleus& nucl) noexcept {
                 nucl.logger.log(LogLevel::DEBUG, "Nucleus: history forgotten");
                 history.clear();
             }
+            auto cur_bubble = nucl.accountant.bubble;
+            auto cur_time = std::chrono::steady_clock::now();
+            auto bubble_delta = cur_bubble - last_bubble;
+            auto time_delta = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_time - last_gc).count();
+            last_bubble = cur_bubble;
+            last_gc = std::move(cur_time);
+            if (auto bubble_ratio = bubble_delta * 100 / time_delta; bubble_ratio > 1)
+                nucl.logger.log(LogLevel::DEBUG,
+                                format_c("Nucleus: bubble {}% {}/{} μs", bubble_delta * 100 / time_delta,
+                                         bubble_delta / 1000, time_delta / 1000));
         }
     }
 }

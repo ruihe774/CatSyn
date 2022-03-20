@@ -146,20 +146,14 @@ NucleusConfig get_default_config() noexcept;
 
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
-    class AllocStat {
-        std::atomic_size_t current{0};
-
-      public:
-        void alloc(size_t size) noexcept;
-        void free(size_t size) noexcept;
-
-        size_t get_current() const noexcept;
-
-        ~AllocStat();
+    struct Accountant {
+        size_t mem{0};
+        size_t bubble{0};
+        ~Accountant();
     };
 
     Logger logger;
-    AllocStat alloc_stat;
+    Accountant accountant;
     NucleusConfig config{get_default_config()};
 
     TableView<Table> finders{nullptr};
