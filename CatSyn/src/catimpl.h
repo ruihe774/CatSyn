@@ -160,7 +160,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
   public:
     struct Accountant {
         size_t mem{0};
-        size_t bubble{0};
         ~Accountant();
     };
 
