@@ -73,6 +73,7 @@ void Nucleus::react() noexcept {
     maintainer_thread = Thread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
     callback_thread = Thread(callbacker, std::ref(*this));
+    set_thread_priority(callback_thread.value(), 1);
     for (size_t i = 0; i < config.thread_count; ++i)
         worker_threads.emplace_back(worker, std::ref(*this));
     logger.log(LogLevel::DEBUG, "Nucleus: reaction started");
