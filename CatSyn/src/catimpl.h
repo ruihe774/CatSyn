@@ -3,10 +3,11 @@
 #include <array>
 #include <atomic>
 #include <optional>
+#include <queue>
+#include <semaphore>
 #include <stdexcept>
 #include <thread>
 #include <vector>
-#include <semaphore>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
@@ -63,6 +64,14 @@ class Thread final : public std::thread {
 using Semaphore = std::counting_semaphore<std::numeric_limits<int>::max()>;
 using BinarySemaphore = std::binary_semaphore;
 
+class SpinLock {
+    std::atomic_flag lock;
+
+  public:
+    void acquire() noexcept;
+    void release() noexcept;
+};
+
 class Logger final : public Object, public ILogger {
     mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
     mutable BinarySemaphore semaphore;
@@ -112,6 +121,9 @@ class Substrate final : public Object, public ISubstrate, public Shuttle {
 };
 
 struct FrameInstance;
+struct FrameInstanceTickGreater {
+    bool operator()(const FrameInstance* l, const FrameInstance* r) noexcept;
+};
 
 class MaintainTask {
   public:
@@ -165,11 +177,12 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     std::optional<Thread> maintainer_thread;
     std::optional<Thread> callback_thread;
     Semaphore work_semaphore{0};
-    boost::lockfree::queue<FrameInstance*> work_queue{128};
+    SpinLock work_queue_lock;
+    std::priority_queue<FrameInstance*, std::vector<FrameInstance*>, FrameInstanceTickGreater> work_queue;
     BinarySemaphore maintain_semaphore{0};
-    boost::lockfree::queue<MaintainTask> maintain_queue{128};
+    boost::lockfree::queue<MaintainTask> maintain_queue{64};
     BinarySemaphore callback_semaphore{0};
-    boost::lockfree::queue<CallbackTask> callback_queue{128};
+    boost::lockfree::queue<CallbackTask> callback_queue{16};
 
     Nucleus();
     ~Nucleus() final;

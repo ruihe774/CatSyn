@@ -12,14 +12,20 @@ struct FrameInstance {
     boost::container::small_vector<FrameInstance*, 30> outputs;
     std::unique_ptr<IOutput::Callback> callback;
     FrameData* frame_data;
+    size_t tick;
     std::atomic_flag taken;
     bool false_dep;
     bool single_threaded;
     unsigned indulgence;
 
-    FrameInstance(Substrate* substrate, FrameData* frame_data) noexcept
-        : substrate(substrate), frame_data(frame_data), false_dep(false), single_threaded(false), indulgence(0) {}
+    FrameInstance(Substrate* substrate, FrameData* frame_data, size_t tick) noexcept
+        : substrate(substrate), frame_data(frame_data), tick(tick), false_dep(false), single_threaded(false),
+          indulgence(0) {}
 };
+
+bool FrameInstanceTickGreater::operator()(const FrameInstance* l, const FrameInstance* r) noexcept {
+    return l->tick > r->tick;
+}
 
 static std::thread::id position_zero;
 
@@ -120,7 +126,9 @@ template<typename... Args> static void post_maintain_task(Nucleus& nucl, Args&&.
 }
 
 static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
+    nucl.work_queue_lock.acquire();
     nucl.work_queue.push(inst);
+    nucl.work_queue_lock.release();
     nucl.work_semaphore.release();
 }
 
@@ -132,7 +140,11 @@ void worker(Nucleus& nucl) noexcept {
         nucl.accountant.bubble += std::chrono::duration_cast<std::chrono::nanoseconds>(wait_end - wait_start).count();
         if (nucl.stop.load(std::memory_order_acquire))
             break;
-        nucl.work_queue.consume_one([&](FrameInstance* inst) {
+        nucl.work_queue_lock.acquire();
+        auto inst = nucl.work_queue.top();
+        nucl.work_queue.pop();
+        nucl.work_queue_lock.release();
+        ([&]() {
             if (inst->taken.test_and_set(std::memory_order_acq_rel))
                 return;
             boost::container::small_vector<const IFrame*, 12> input_frames;
@@ -148,7 +160,7 @@ void worker(Nucleus& nucl) noexcept {
             }
             inst->product = std::move(product);
             post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
-        });
+        })();
     }
 }
 
@@ -170,7 +182,8 @@ template<typename A, typename B> struct std::hash<std::pair<A, B>> {
 };
 
 static FrameInstance*
-construct(Nucleus& nucl, std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
+construct(Nucleus& nucl, size_t tick,
+          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
@@ -189,7 +202,7 @@ void maintainer(Nucleus& nucl) noexcept {
     std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>> neck;
     std::unordered_set<std::pair<Substrate*, size_t>> history;
     std::unordered_map<Substrate*, unsigned> miss;
-    uint8_t gc_tick = 0;
+    size_t tick = 0;
     auto last_gc = std::chrono::steady_clock::now();
     size_t last_bubble = 0;
     while (true) {
@@ -231,7 +244,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 auto substrate = static_cast<Substrate*>(task.get_pointer());
                 auto frame_idx = task.get_value();
                 auto callback = *reinterpret_cast<IOutput::Callback**>(task.get_payload().data());
-                construct(nucl, instances, alive, neck, history, miss, substrate, frame_idx,
+                construct(nucl, tick, instances, alive, neck, history, miss, substrate, frame_idx,
                           std::unique_ptr<IOutput::Callback>(callback));
                 break;
             }
@@ -245,7 +258,7 @@ void maintainer(Nucleus& nucl) noexcept {
                 }
         });
 
-        if (++gc_tick == 0) { // XXX: UB?
+        if (++tick % 256 == 0) {
             for (auto it = instances.begin(); it != instances.end();) {
                 auto inst = it->second.get();
                 if (!inst->product || inst->callback || inst->single_threaded)
@@ -270,7 +283,7 @@ void maintainer(Nucleus& nucl) noexcept {
             auto bubble_delta = cur_bubble - last_bubble;
             auto time_delta = std::chrono::duration_cast<std::chrono::nanoseconds>(cur_time - last_gc).count();
             last_bubble = cur_bubble;
-            last_gc = std::move(cur_time);
+            last_gc = cur_time;
             if (auto bubble_ratio = bubble_delta * 100 / time_delta; bubble_ratio > 1)
                 nucl.logger.log(LogLevel::DEBUG,
                                 format_c("Nucleus: bubble {}% {}/{} μs", bubble_delta * 100 / time_delta,
@@ -279,7 +292,7 @@ void maintainer(Nucleus& nucl) noexcept {
     }
 }
 
-FrameInstance* construct(Nucleus& nucl,
+FrameInstance* construct(Nucleus& nucl, size_t tick,
                          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
                          std::unordered_set<FrameInstance*>& alive,
                          std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
@@ -313,10 +326,10 @@ FrameInstance* construct(Nucleus& nucl,
 
     FrameData* frame_data = nullptr;
     promoter->get_frame_data(frame_idx, &frame_data);
-    auto instc = std::make_unique<FrameInstance>(substrate, frame_data);
+    auto instc = std::make_unique<FrameInstance>(substrate, frame_data, tick);
     for (size_t i = 0; i < frame_data->dependency_count; ++i) {
         auto dep = frame_data->dependencies[i];
-        auto input = construct(nucl, instances, alive, neck, history, miss,
+        auto input = construct(nucl, tick, instances, alive, neck, history, miss,
                                &dynamic_cast<Substrate&>(*const_cast<ISubstrate*>(dep.substrate)), dep.frame_idx,
                                nullptr, missed);
         instc->inputs.emplace_back(input);
