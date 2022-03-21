@@ -10,8 +10,6 @@ include(config.cmake)
 include(retrieve_commit.cmake)
 include(install_pdb.cmake)
 
-include(mimalloc.cmake)
-
 add_subdirectory(snmalloc EXCLUDE_FROM_ALL)
 target_compile_definitions(snmalloc_lib INTERFACE SNMALLOC_USE_LARGE_CHUNKS)
 

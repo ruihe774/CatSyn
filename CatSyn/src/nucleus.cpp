@@ -1,5 +1,3 @@
-#include <mimalloc.h>
-
 #include <catimpl.h>
 
 Shuttle::Shuttle(Nucleus& nucl) noexcept : nucl(nucl) {}
@@ -74,7 +72,5 @@ CAT_API Version catsyn::get_version() noexcept {
 
 CAT_API void catsyn::create_nucleus(INucleus** out) noexcept {
     thread_init();
-    mi_option_set_enabled_default(mi_option_large_os_pages, true);
-
     create_instance<Nucleus>(out);
 }

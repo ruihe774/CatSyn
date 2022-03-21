@@ -1,6 +1,3 @@
-[submodule "mimalloc"]
-	path = mimalloc
-	url = https://github.com/microsoft/mimalloc.git
 [submodule "boost"]
 	path = boost
 	url = https://github.com/boostorg/boost.git
