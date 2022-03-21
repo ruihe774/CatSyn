@@ -28,7 +28,7 @@ void freeMap(VSMap* map) noexcept {
 }
 
 void clearMap(VSMap* map) noexcept {
-    map->get_mut().table->resize(0);
+    map->get_mut().table->clear();
 }
 
 void setError(VSMap* map, const char* errorMessage) noexcept {

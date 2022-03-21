@@ -3,7 +3,6 @@
 #include <atomic>
 #include <exception>
 #include <functional>
-#include <new>
 #include <typeinfo>
 
 #ifdef _WIN32
@@ -85,15 +84,13 @@ class ITable : virtual public IObject {
   public:
     static constexpr size_t npos = static_cast<size_t>(-1);
 
-    virtual const IObject* get(size_t ref) const noexcept = 0;
-    virtual void set(size_t ref, const IObject* obj) noexcept = 0;
-
-    virtual size_t get_ref(const char* key) const noexcept = 0;
-    virtual const char* get_key(size_t ref) const noexcept = 0;
-    virtual void set_key(size_t ref, const char* key) noexcept = 0;
-
+    virtual const IObject* get(size_t ref, const char** key_out) const noexcept = 0;
+    virtual void set(size_t ref, const char* key, const IObject* obj) noexcept = 0;
+    virtual size_t find(const char* key) const noexcept = 0;
     virtual size_t size() const noexcept = 0;
-    virtual void resize(size_t len) noexcept = 0;
+    virtual void clear() noexcept = 0;
+    virtual size_t next(size_t ref) const noexcept = 0;
+    virtual size_t prev(size_t ref) const noexcept = 0;
 };
 
 class IBytes : virtual public IObject {
@@ -117,19 +114,22 @@ class IBytes : virtual public IObject {
     virtual void realloc(size_t new_size) noexcept = 0;
 };
 
-class IAlignedBytes : virtual public IBytes {
-  public:
-    static constexpr std::align_val_t alignment = static_cast<std::align_val_t>(64);
-};
-
 enum class SampleType {
     Integer,
     Float,
 };
 
-class INumberArray : virtual public IBytes {
+class IArray : virtual public IBytes {
+    size_t size() const noexcept {
+        return IBytes::size();
+    }
+
   public:
-    SampleType sample_type;
+    const std::type_info& element_type;
+
+    size_t bytes_count() const noexcept {
+        return size();
+    }
 };
 
 enum class ColorFamily {
@@ -168,9 +168,9 @@ struct VideoInfo {
 
 class IFrame : virtual public IObject {
   public:
-    virtual const IAlignedBytes* get_plane(unsigned idx) const noexcept = 0;
-    virtual IAlignedBytes* get_plane_mut(unsigned idx) noexcept = 0;
-    virtual void set_plane(unsigned idx, const IAlignedBytes* in, size_t stride) noexcept = 0;
+    virtual const IBytes* get_plane(unsigned idx) const noexcept = 0;
+    virtual IBytes* get_plane_mut(unsigned idx) noexcept = 0;
+    virtual void set_plane(unsigned idx, const IBytes* in, size_t stride) noexcept = 0;
 
     virtual FrameInfo get_frame_info() const noexcept = 0;
 
@@ -203,10 +203,9 @@ class IEnzyme : virtual public IRef {
 class IFactory : virtual public IRef {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
-    virtual void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept = 0;
-    virtual void create_number_array(SampleType sample_type, const void* data, size_t len,
-                                     INumberArray** out) noexcept = 0;
-    virtual void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
+    virtual void create_array(const std::type_info& type, const void* data, size_t bytes_count,
+                              IArray** out) noexcept = 0;
+    virtual void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
     virtual void create_table(size_t reserve_capacity, ITable** out) noexcept = 0;
 
@@ -215,9 +214,9 @@ class IFactory : virtual public IRef {
 };
 
 struct ArgSpec {
-    // TODO: need to revise
     const char* name;
     const std::type_info& type;
+    bool array;
     bool required;
 };
 
@@ -252,12 +251,13 @@ struct FrameData {
     size_t dependency_count;
 };
 
-class IFilter : virtual public IObject {
+class IFilter : virtual public IRef {
   public:
     virtual FilterFlags get_filter_flags() const noexcept = 0;
     virtual VideoInfo get_video_info() const noexcept = 0;
-    virtual void get_frame_data(size_t frame_idx, FrameData** frame_data) noexcept = 0;
-    virtual void process_frame(const IFrame* const* input_frames, FrameData* frame_data_move_in, const IFrame** out) = 0;
+    virtual void get_frame_data(size_t frame_idx, FrameData** frame_data) const noexcept = 0;
+    virtual void process_frame(const IFrame* const* input_frames, FrameData** frame_data, const IFrame** out) const = 0;
+    virtual void drop_frame_data(FrameData* frame_data) const noexcept = 0;
 };
 
 class IOutput : virtual public IRef {
