@@ -70,13 +70,13 @@ std::array<std::byte, MaintainTask::payload_size> MaintainTask::get_payload() co
 }
 
 static void worker(Nucleus&) noexcept;
-static void maintainer(Nucleus&) noexcept;
+static void maintainer(Nucleus&);
 static void callbacker(Nucleus&) noexcept;
 
 void Nucleus::react() noexcept {
     if (maintainer_thread)
         return;
-    maintainer_thread = Thread(maintainer, std::ref(*this));
+    maintainer_thread = JThread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
     callback_thread = Thread(callbacker, std::ref(*this));
     set_thread_priority(callback_thread.value(), 1);
@@ -93,12 +93,10 @@ Nucleus::~Nucleus() {
     stop.store(true, std::memory_order_release);
     for (auto&& t [[maybe_unused]] : worker_threads)
         work_semaphore.release();
-    maintain_semaphore.release();
+    maintain_queue.request_stop();
     callback_semaphore.release();
     for (auto&& t : worker_threads)
         t.join();
-    if (maintainer_thread)
-        maintainer_thread->join();
     if (callback_thread)
         callback_thread->join();
 }
@@ -122,7 +120,6 @@ static std::array<std::byte, MaintainTask::payload_size> move_in_exc(std::except
 
 template<typename... Args> static void post_maintain_task(Nucleus& nucl, Args&&... args) noexcept {
     nucl.maintain_queue.push(MaintainTask::create(std::forward<Args>(args)...));
-    nucl.maintain_semaphore.release();
 }
 
 static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
@@ -193,7 +190,7 @@ static void
 post_work(Nucleus& nucl, FrameInstance* inst,
           std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck) noexcept;
 
-void maintainer(Nucleus& nucl) noexcept {
+void maintainer(Nucleus& nucl) {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
     std::unordered_set<FrameInstance*> alive;
     std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>> neck;
@@ -202,9 +199,6 @@ void maintainer(Nucleus& nucl) noexcept {
     size_t tick = 0;
     while (true) {
         bool constructed = false;
-        nucl.maintain_semaphore.acquire();
-        if (nucl.stop.load(std::memory_order_acquire))
-            break;
         nucl.maintain_queue.consume_all([&](MaintainTask task) {
             switch (task.get_type()) {
             case MaintainTask::Type::Notify: {

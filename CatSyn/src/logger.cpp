@@ -50,6 +50,12 @@ void set_thread_priority(std::thread& thread, int priority, bool allow_boost) no
     SetThreadPriorityBoost(hThread, !allow_boost);
 }
 
+void set_thread_priority(std::jthread& thread, int priority, bool allow_boost) noexcept {
+    HANDLE hThread = thread.native_handle();
+    SetThreadPriority(hThread, priority);
+    SetThreadPriorityBoost(hThread, !allow_boost);
+}
+
 #else
 
 #include <errno.h>
@@ -103,10 +109,9 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
     write_err(buf, fmt::format_to_n(buf, sizeof(buf), "{}{}{}\t{}\n", color, prompt, clear, msg).out - buf);
 }
 
-static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>>& queue, BinarySemaphore& semaphore,
-                       ILogSink* const& sink, const std::atomic_bool& stop) noexcept {
+static void log_worker(allostery::MPSCQueue<uintptr_t>& queue, ILogSink* const& sink) {
     bool enable_ascii_escape = check_support_ascii_escape();
-    auto f = [&](uintptr_t record) {
+    queue.stream([&](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);
         auto msg = reinterpret_cast<char*>(record & ~static_cast<uintptr_t>(3));
         if (sink)
@@ -114,24 +119,17 @@ static void log_worker(boost::lockfree::queue<uintptr_t, boost::lockfree::capaci
         else
             log_out(level, msg, enable_ascii_escape);
         operator delete(msg);
-    };
-    while (!stop.load(std::memory_order_acquire)) {
-        semaphore.acquire();
-        queue.consume_all(f);
-    }
-    queue.consume_all(f);
+    });
 }
 
 Logger::Logger()
-    : semaphore(0), filter_level(LogLevel::DEBUG), stop(false),
-      thread(log_worker, std::ref(queue), std::ref(semaphore), std::cref(*sink.addressof()), std::cref(stop)) {
+    : filter_level(LogLevel::DEBUG),
+      thread(log_worker, std::ref(queue), std::cref(*sink.addressof())) {
     set_thread_priority(thread, -1, false);
 }
 
 Logger::~Logger() {
-    stop.store(true, std::memory_order_release);
-    semaphore.release();
-    thread.join();
+    queue.request_stop();
 }
 
 [[noreturn]] static void log_failed() {
@@ -144,9 +142,7 @@ void Logger::log(LogLevel level, const char* msg) const noexcept {
     auto msg_len = strlen(msg);
     auto copied = static_cast<char*>(operator new(msg_len + 1));
     memcpy(copied, msg, msg_len + 1);
-    if (!queue.push(reinterpret_cast<uintptr_t>(copied) | static_cast<uintptr_t>(level) / 10))
-        log_failed();
-    semaphore.release();
+    queue.push(reinterpret_cast<uintptr_t>(copied) | static_cast<uintptr_t>(level) / 10);
 }
 
 void Logger::set_level(LogLevel level) noexcept {

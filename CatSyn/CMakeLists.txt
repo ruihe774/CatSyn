@@ -17,7 +17,6 @@ add_library(catsyn SHARED
     src/enzyme.cpp
     src/frame.cpp
     src/logger.cpp
-    src/new-delete.cpp
     src/nucleus.cpp
     src/substrate.cpp
     src/table.cpp
@@ -30,6 +29,7 @@ target_sources(catsyn PUBLIC
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(catsyn PRIVATE allostery)
 target_link_libraries(catsyn PRIVATE snmalloc_lib)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE

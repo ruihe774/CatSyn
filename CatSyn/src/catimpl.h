@@ -15,6 +15,9 @@
 
 #include <fmt/format.h>
 
+#include <allostery/MPSCQueue.h>
+#include <allostery/Stoper.h>
+
 #define CAT_IMPL
 
 #include <catcfg.h>
@@ -61,6 +64,27 @@ class Thread final : public std::thread {
         : std::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
+class JThread final : public std::jthread {
+    template<typename F, typename... Args>
+    static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
+        thread_init();
+        try {
+            std::invoke(f, std::forward<Args>(args)...);
+        } catch (allostery::StopRequested&) {}
+    }
+
+    template<typename T> struct unbox_reference { typedef T type; };
+    template<typename U> struct unbox_reference<std::reference_wrapper<U>> {
+        typedef std::add_lvalue_reference_t<U> type;
+    };
+    template<typename T> using unbox_reference_t = typename unbox_reference<T>::type;
+
+  public:
+    template<typename F, typename... Args>
+    explicit JThread(F f, Args&&... args)
+        : std::jthread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
+};
+
 using Semaphore = std::counting_semaphore<std::numeric_limits<int>::max()>;
 using BinarySemaphore = std::binary_semaphore;
 
@@ -73,12 +97,10 @@ class SpinLock {
 };
 
 class Logger final : public Object, public ILogger {
-    mutable boost::lockfree::queue<uintptr_t, boost::lockfree::capacity<128>> queue;
-    mutable BinarySemaphore semaphore;
+    mutable allostery::MPSCQueue<uintptr_t> queue;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
-    std::atomic_bool stop;
-    Thread thread;
+    JThread thread;
 
   public:
     Logger();
@@ -173,13 +195,12 @@ class Nucleus final : public Object, public INucleus, public IFactory {
 
     std::atomic_bool stop{false};
     std::vector<Thread> worker_threads;
-    std::optional<Thread> maintainer_thread;
+    std::optional<JThread> maintainer_thread;
     std::optional<Thread> callback_thread;
     Semaphore work_semaphore{0};
     SpinLock work_queue_lock;
     std::priority_queue<FrameInstance*, std::vector<FrameInstance*>, FrameInstanceTickGreater> work_queue;
-    BinarySemaphore maintain_semaphore{0};
-    boost::lockfree::queue<MaintainTask> maintain_queue{64};
+    allostery::MPSCQueue<MaintainTask> maintain_queue;
     BinarySemaphore callback_semaphore{0};
     boost::lockfree::queue<CallbackTask> callback_queue{16};
 
@@ -251,3 +272,4 @@ struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception
 };
 
 void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept;
+void set_thread_priority(std::jthread& thread, int priority, bool allow_boost = true) noexcept;
