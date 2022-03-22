@@ -7,4 +7,8 @@ project(Allostery
 add_library(allostery STATIC
     src/allocator.cpp
 )
+target_sources(allostery PUBLIC
+    include/MPSCQueue.h
+)
+target_include_directories(allostery PUBLIC include)
 target_link_libraries(allostery PRIVATE snmalloc_lib)
