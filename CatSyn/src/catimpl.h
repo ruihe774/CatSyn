@@ -193,6 +193,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     TableView<Table> ribosomes{nullptr};
     TableView<Table> enzymes{nullptr};
 
+    allostery::MPSCQueue<MaintainTask> maintain_queue;
     std::atomic_bool stop{false};
     std::vector<Thread> worker_threads;
     std::optional<JThread> maintainer_thread;
@@ -200,7 +201,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     Semaphore work_semaphore{0};
     SpinLock work_queue_lock;
     std::priority_queue<FrameInstance*, std::vector<FrameInstance*>, FrameInstanceTickGreater> work_queue;
-    allostery::MPSCQueue<MaintainTask> maintain_queue;
     BinarySemaphore callback_semaphore{0};
     boost::lockfree::queue<CallbackTask> callback_queue{16};
 
