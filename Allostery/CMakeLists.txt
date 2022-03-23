@@ -8,8 +8,8 @@ add_library(allostery STATIC
     src/allocator.cpp
 )
 target_sources(allostery PUBLIC
-    include/allostery/MPSCQueue.h
-    include/allostery/Stoper.h
+    include/allostery/mpsc_queue.h
+    include/allostery/terminator.h
 )
 target_include_directories(allostery PUBLIC include)
 target_link_libraries(allostery PRIVATE snmalloc_lib)

@@ -15,8 +15,8 @@
 
 #include <fmt/format.h>
 
-#include <allostery/MPSCQueue.h>
-#include <allostery/Stoper.h>
+#include <allostery/mpsc_queue.h>
+#include <allostery/terminator.h>
 
 #define CAT_IMPL
 

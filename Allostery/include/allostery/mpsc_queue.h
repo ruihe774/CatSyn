@@ -5,7 +5,7 @@
 
 #include <emmintrin.h>
 
-#include <allostery/Stoper.h>
+#include <allostery/terminator.h>
 
 namespace allostery {
 
