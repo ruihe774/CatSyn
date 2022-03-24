@@ -12,8 +12,14 @@ else()
     add_library(Boost::stacktrace ALIAS boost_stacktrace_backtrace)
 endif()
 
+add_library(allostery STATIC
+    src/allocator.cpp
+)
+target_link_libraries(allostery PUBLIC snmalloc_lib)
+
 add_library(catsyn SHARED
     src/catimpl.h
+    src/queue.h
     src/enzyme.cpp
     src/frame.cpp
     src/logger.cpp
@@ -30,13 +36,11 @@ target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(catsyn PRIVATE allostery)
-target_link_libraries(catsyn PRIVATE snmalloc_lib)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
     Boost::algorithm
     Boost::container
     Boost::dll
-    Boost::lockfree
     Boost::stacktrace
 )
 target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)

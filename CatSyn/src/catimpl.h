@@ -1,28 +1,23 @@
 #pragma once
 
 #include <array>
-#include <atomic>
 #include <optional>
-#include <queue>
-#include <semaphore>
 #include <stdexcept>
 #include <thread>
 #include <vector>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
-#include <boost/lockfree/queue.hpp>
 
 #include <fmt/format.h>
-
-#include <allostery/mpsc_queue.h>
-#include <allostery/terminator.h>
 
 #define CAT_IMPL
 
 #include <catcfg.h>
 #include <cathelper.h>
 #include <catsyn.h>
+
+#include <queue.h>
 
 using namespace catsyn;
 
@@ -45,32 +40,13 @@ void write_err(const char* s, size_t n) noexcept;
 
 void thread_init() noexcept;
 
-class Thread final : public std::thread {
-    template<typename F, typename... Args>
-    static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
-        thread_init();
-        std::invoke(f, std::forward<Args>(args)...);
-    }
-
-    template<typename T> struct unbox_reference { typedef T type; };
-    template<typename U> struct unbox_reference<std::reference_wrapper<U>> {
-        typedef std::add_lvalue_reference_t<U> type;
-    };
-    template<typename T> using unbox_reference_t = typename unbox_reference<T>::type;
-
-  public:
-    template<typename F, typename... Args>
-    explicit Thread(F f, Args&&... args)
-        : std::thread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
-};
-
 class JThread final : public std::jthread {
     template<typename F, typename... Args>
     static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
         thread_init();
         try {
             std::invoke(f, std::forward<Args>(args)...);
-        } catch (allostery::StopRequested&) {}
+        } catch (StopRequested&) {}
     }
 
     template<typename T> struct unbox_reference { typedef T type; };
@@ -85,19 +61,8 @@ class JThread final : public std::jthread {
         : std::jthread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
-using Semaphore = std::counting_semaphore<std::numeric_limits<int>::max()>;
-using BinarySemaphore = std::binary_semaphore;
-
-class SpinLock {
-    std::atomic_flag lock;
-
-  public:
-    void acquire() noexcept;
-    void release() noexcept;
-};
-
 class Logger final : public Object, public ILogger {
-    mutable allostery::MPSCQueue<uintptr_t> queue;
+    mutable MPSCQueue<uintptr_t> queue;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
     JThread thread;
@@ -193,16 +158,12 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     TableView<Table> ribosomes{nullptr};
     TableView<Table> enzymes{nullptr};
 
-    allostery::MPSCQueue<MaintainTask> maintain_queue;
-    std::atomic_bool stop{false};
-    std::vector<Thread> worker_threads;
+    MPSCQueue<MaintainTask> maintain_queue;
+    MPSCQueue<CallbackTask> callback_queue;
+    PriorityQueue<FrameInstance*, FrameInstanceTickGreater> work_queue;
     std::optional<JThread> maintainer_thread;
-    std::optional<Thread> callback_thread;
-    Semaphore work_semaphore{0};
-    SpinLock work_queue_lock;
-    std::priority_queue<FrameInstance*, std::vector<FrameInstance*>, FrameInstanceTickGreater> work_queue;
-    BinarySemaphore callback_semaphore{0};
-    boost::lockfree::queue<CallbackTask> callback_queue{16};
+    std::optional<JThread> callback_thread;
+    std::vector<JThread> worker_threads;
 
     Nucleus();
     ~Nucleus() final;
@@ -271,5 +232,4 @@ struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception
     }
 };
 
-void set_thread_priority(std::thread& thread, int priority, bool allow_boost = true) noexcept;
 void set_thread_priority(std::jthread& thread, int priority, bool allow_boost = true) noexcept;

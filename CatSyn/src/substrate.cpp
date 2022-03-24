@@ -69,16 +69,16 @@ std::array<std::byte, MaintainTask::payload_size> MaintainTask::get_payload() co
     return pl;
 }
 
-static void worker(Nucleus&) noexcept;
+static void worker(Nucleus&);
 static void maintainer(Nucleus&);
-static void callbacker(Nucleus&) noexcept;
+static void callbacker(Nucleus&);
 
 void Nucleus::react() noexcept {
     if (maintainer_thread)
         return;
     maintainer_thread = JThread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
-    callback_thread = Thread(callbacker, std::ref(*this));
+    callback_thread = JThread(callbacker, std::ref(*this));
     set_thread_priority(callback_thread.value(), 1);
     for (size_t i = 0; i < config.thread_count; ++i)
         worker_threads.emplace_back(worker, std::ref(*this));
@@ -90,15 +90,9 @@ bool Nucleus::is_reacting() const noexcept {
 }
 
 Nucleus::~Nucleus() {
-    stop.store(true, std::memory_order_release);
-    for (auto&& t [[maybe_unused]] : worker_threads)
-        work_semaphore.release();
     maintain_queue.request_stop();
-    callback_semaphore.release();
-    for (auto&& t : worker_threads)
-        t.join();
-    if (callback_thread)
-        callback_thread->join();
+    callback_queue.request_stop();
+    work_queue.request_stop();
 }
 
 [[noreturn, maybe_unused]] static void bug() {
@@ -123,39 +117,27 @@ template<typename... Args> static void post_maintain_task(Nucleus& nucl, Args&&.
 }
 
 static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
-    nucl.work_queue_lock.acquire();
     nucl.work_queue.push(inst);
-    nucl.work_queue_lock.release();
-    nucl.work_semaphore.release();
 }
 
-void worker(Nucleus& nucl) noexcept {
-    while (true) {
-        nucl.work_semaphore.acquire();
-        if (nucl.stop.load(std::memory_order_acquire))
-            break;
-        nucl.work_queue_lock.acquire();
-        auto inst = nucl.work_queue.top();
-        nucl.work_queue.pop();
-        nucl.work_queue_lock.release();
-        ([&]() {
-            if (inst->taken.test_and_set(std::memory_order_acq_rel))
-                return;
-            boost::container::small_vector<const IFrame*, 12> input_frames;
-            for (auto input : inst->inputs)
-                input_frames.push_back(input->product.get());
-            cat_ptr<const IFrame> product;
-            try {
-                inst->substrate->filters[std::this_thread::get_id()]->process_frame(
-                    input_frames.data(), inst->frame_data, product.put_const());
-            } catch (...) {
-                post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));
-                return;
-            }
-            inst->product = std::move(product);
-            post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
-        })();
-    }
+void worker(Nucleus& nucl) {
+    nucl.work_queue.stream([&](FrameInstance* inst) {
+        if (inst->taken.test_and_set(std::memory_order_acq_rel))
+            return;
+        boost::container::small_vector<const IFrame*, 12> input_frames;
+        for (auto input : inst->inputs)
+            input_frames.push_back(input->product.get());
+        cat_ptr<const IFrame> product;
+        try {
+            inst->substrate->filters[std::this_thread::get_id()]->process_frame(input_frames.data(), inst->frame_data,
+                                                                                product.put_const());
+        } catch (...) {
+            post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0, move_in_exc(std::current_exception()));
+            return;
+        }
+        inst->product = std::move(product);
+        post_maintain_task(nucl, MaintainTask::Type::Notify, inst, 0);
+    });
 }
 
 static bool check_all_inputs_ready(FrameInstance* inst) {
@@ -362,18 +344,13 @@ void post_work(Nucleus& nucl, FrameInstance* inst,
         neck[inst->substrate.get()].second.insert(inst);
 }
 
-void callbacker(Nucleus& nucl) noexcept {
-    while (true) {
-        nucl.callback_semaphore.acquire();
-        if (nucl.stop.load(std::memory_order_acquire))
-            break;
-        nucl.callback_queue.consume_all([](CallbackTask task) {
-            auto callback = std::unique_ptr<IOutput::Callback>(task.callback);
-            auto frame = cat_ptr<const IFrame>(task.frame, false);
-            auto exc = move_out_exc(task.exc);
-            (*callback)(frame.get(), exc);
-        });
-    }
+void callbacker(Nucleus& nucl) {
+    nucl.callback_queue.stream([](CallbackTask task) {
+        auto callback = std::unique_ptr<IOutput::Callback>(task.callback);
+        auto frame = cat_ptr<const IFrame>(task.frame, false);
+        auto exc = move_out_exc(task.exc);
+        (*callback)(frame.get(), exc);
+    });
 }
 
 class Output final : public Object, public IOutput, public Shuttle {
@@ -391,7 +368,6 @@ class Output final : public Object, public IOutput, public Shuttle {
                     frame,
                     move_in_exc(exc),
                 });
-                nucl.callback_semaphore.release();
             });
         post_maintain_task(nucl, MaintainTask::Type::Construct, substrate.get(), frame_idx, pl);
     }

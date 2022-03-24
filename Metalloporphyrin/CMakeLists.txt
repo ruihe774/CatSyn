@@ -24,7 +24,6 @@ target_include_directories(metalloporphyrin PUBLIC include)
 target_include_directories(metalloporphyrin PRIVATE src)
 target_include_directories(metalloporphyrin PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(metalloporphyrin PRIVATE allostery)
-target_link_libraries(metalloporphyrin PRIVATE snmalloc_lib)
 target_link_libraries(metalloporphyrin PRIVATE fmt)
 target_link_libraries(metalloporphyrin PRIVATE
     Boost::algorithm

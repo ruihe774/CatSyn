@@ -17,8 +17,6 @@ add_subdirectory(boost EXCLUDE_FROM_ALL)
 
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
 
-add_subdirectory(Allostery)
-
 add_subdirectory(CatSyn)
 
 add_subdirectory(Metalloporphyrin)

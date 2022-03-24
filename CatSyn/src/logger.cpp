@@ -44,12 +44,6 @@ void write_err(const char* s, size_t n) noexcept {
     }
 }
 
-void set_thread_priority(std::thread& thread, int priority, bool allow_boost) noexcept {
-    HANDLE hThread = thread.native_handle();
-    SetThreadPriority(hThread, priority);
-    SetThreadPriorityBoost(hThread, !allow_boost);
-}
-
 void set_thread_priority(std::jthread& thread, int priority, bool allow_boost) noexcept {
     HANDLE hThread = thread.native_handle();
     SetThreadPriority(hThread, priority);
@@ -109,7 +103,7 @@ static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) n
     write_err(buf, fmt::format_to_n(buf, sizeof(buf), "{}{}{}\t{}\n", color, prompt, clear, msg).out - buf);
 }
 
-static void log_worker(allostery::MPSCQueue<uintptr_t>& queue, ILogSink* const& sink) {
+static void log_worker(MPSCQueue<uintptr_t>& queue, ILogSink* const& sink) {
     bool enable_ascii_escape = check_support_ascii_escape();
     queue.stream([&](uintptr_t record) {
         auto level = static_cast<LogLevel>((record & 3u) * 10u);

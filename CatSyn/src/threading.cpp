@@ -102,18 +102,3 @@ void terminate_with_stacktrace() {
 void thread_init() noexcept {
     std::set_terminate(terminate_with_stacktrace);
 }
-
-void SpinLock::acquire() noexcept {
-    for (;;) {
-      if (!lock.test_and_set(std::memory_order_acquire)) {
-        break;
-      }
-      while (lock.test(std::memory_order_relaxed)) {
-        _mm_pause();
-      }
-    }
-}
-
-void SpinLock::release() noexcept {
-    lock.clear(std::memory_order_release);
-}
