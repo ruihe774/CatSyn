@@ -62,7 +62,7 @@ class JThread final : public std::jthread {
 };
 
 class Logger final : public Object, public ILogger {
-    mutable MPSCQueue<uintptr_t> queue;
+    mutable SCQueue<uintptr_t> queue;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
     JThread thread;
@@ -158,8 +158,8 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     TableView<Table> ribosomes{nullptr};
     TableView<Table> enzymes{nullptr};
 
-    MPSCQueue<MaintainTask> maintain_queue;
-    MPSCQueue<CallbackTask> callback_queue;
+    SCQueue<MaintainTask> maintain_queue;
+    SCQueue<CallbackTask> callback_queue;
     PriorityQueue<FrameInstance*, FrameInstanceTickGreater> work_queue;
     std::optional<JThread> maintainer_thread;
     std::optional<JThread> callback_thread;

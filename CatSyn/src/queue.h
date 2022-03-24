@@ -6,7 +6,7 @@
 
 struct StopRequested : std::exception {};
 
-template<typename T> class MPSCQueue {
+template<typename T> class SCQueue {
     struct Node {
         std::atomic<Node*> next;
         std::optional<T> value;
@@ -28,7 +28,7 @@ template<typename T> class MPSCQueue {
     }
 
   public:
-    MPSCQueue() noexcept {
+    SCQueue() noexcept {
         auto stub = new Node{std::nullopt};
         head.store(stub, std::memory_order_relaxed);
         tail.store(stub, std::memory_order_relaxed);
@@ -40,9 +40,8 @@ template<typename T> class MPSCQueue {
 
     template<bool wait = true> std::conditional_t<wait, T, std::optional<T>> pop() noexcept(!wait) {
         auto t = tail.load(std::memory_order_relaxed);
-        auto sure = false;
     reload:
-        if (auto next = t->next.load(sure ? std::memory_order_relaxed : std::memory_order_acquire); next) {
+        if (auto next = t->next.load(std::memory_order_acquire); next) {
             tail.store(next, std::memory_order_relaxed);
             delete t;
             std::optional<T> ret;
@@ -59,7 +58,6 @@ template<typename T> class MPSCQueue {
                     if (!sem.test_and_set(std::memory_order_acquire))
                         goto reload;
                     sem.wait(true, std::memory_order_relaxed);
-                    sure = true;
                 }
             else
                 return std::nullopt;
@@ -103,7 +101,7 @@ template<typename T> class MPSCQueue {
         }
     }
 
-    ~MPSCQueue() {
+    ~SCQueue() {
         for (auto cur = tail.load(std::memory_order_relaxed); cur;) {
             auto next = cur->next.load(std::memory_order_relaxed);
             delete cur;
