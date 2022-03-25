@@ -6,16 +6,14 @@ project(CatSyn
     DESCRIPTION "Catalyzed video processing framework"
 )
 
-if(WIN32)
-    add_library(Boost::stacktrace ALIAS boost_stacktrace_windbg)
-else()
-    add_library(Boost::stacktrace ALIAS boost_stacktrace_backtrace)
-endif()
-
 add_library(allostery STATIC
-    src/allocator.cpp
+    src/allostery.cpp
 )
-target_link_libraries(allostery PUBLIC snmalloc_lib)
+target_sources(allostery PUBLIC
+    src/allostery.h
+)
+target_include_directories(allostery PUBLIC src)
+target_link_libraries(allostery PRIVATE snmalloc_lib)
 
 add_library(catsyn SHARED
     src/catimpl.h
@@ -26,7 +24,6 @@ add_library(catsyn SHARED
     src/nucleus.cpp
     src/substrate.cpp
     src/table.cpp
-    src/threading.cpp
 )
 target_sources(catsyn PUBLIC
     include/cathelper.h
@@ -38,16 +35,9 @@ target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(catsyn PRIVATE allostery)
 target_link_libraries(catsyn PRIVATE fmt)
 target_link_libraries(catsyn PRIVATE
-    Boost::algorithm
     Boost::container
     Boost::dll
-    Boost::stacktrace
 )
-target_compile_definitions(catsyn PRIVATE BOOST_STACKTRACE_LINK)
-
-if(NOT WIN32)
-    target_link_libraries(catsyn PRIVATE dl backtrace)
-endif()
 
 configure_file(src/catcfg.h.in catcfg.h)
 

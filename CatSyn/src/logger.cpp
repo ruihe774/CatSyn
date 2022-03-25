@@ -4,8 +4,6 @@
 
 #include <catimpl.h>
 
-#ifdef _WIN32
-
 #include <Windows.h>
 
 [[noreturn]] void throw_system_error() {
@@ -28,7 +26,7 @@ static size_t u2w(const char* s, const size_t len, const wchar_t** out) noexcept
     return wlen;
 }
 
-void write_err(const char* s, size_t n) noexcept {
+static void write_err(const char* s, size_t n) noexcept {
     static int is_terminal = -1;
     if (is_terminal == -1) {
         DWORD mode;
@@ -49,32 +47,6 @@ void set_thread_priority(std::jthread& thread, int priority, bool allow_boost) n
     SetThreadPriority(hThread, priority);
     SetThreadPriorityBoost(hThread, !allow_boost);
 }
-
-#else
-
-#include <errno.h>
-#include <unistd.h>
-
-[[noreturn]] void throw_system_error() {
-    throw std::system_error(errno, std::system_category());
-}
-
-static bool check_support_ascii_escape() noexcept {
-    return isatty(2);
-}
-
-void write_err(const char* s, size_t n) noexcept {
-    // Linux delivers signals to the main thread by default
-    // so we cannot be interrupted
-    if (write(2, s, n) != n)
-        throw_system_error();
-}
-
-void set_thread_priority(std::thread& thread, int priority, bool allow_boost) noexcept {
-    // TODO: implement this
-}
-
-#endif
 
 static void log_out(LogLevel level, const char* msg, bool enable_ascii_escape) noexcept {
     const char *prompt, *color, *clear;

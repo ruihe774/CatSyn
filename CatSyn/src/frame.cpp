@@ -1,113 +1,51 @@
-#include <cstddef>
-
-#include <string.h>
-
-#include <snmalloc.h>
+#include <array>
 
 #include <catimpl.h>
 
-class Bytes : public Object, virtual public IBytes, public Shuttle {
-    static void* realloc(void* ptr, size_t size) noexcept {
-        using namespace snmalloc;
-        auto a = ThreadAlloc::get();
-        size_t sz = a->alloc_size(ptr);
-        if (sz >= size)
-            return ptr;
+#include <allostery.h>
 
-        void* p = a->alloc(size);
-        if (p) {
-            sz = bits::min(size, sz);
-            if (sz != 0)
-                memcpy(p, ptr, sz);
-            a->dealloc(ptr);
-        } else if (size == 0) {
-            a->dealloc(ptr);
-        } else {
-            errno = ENOMEM;
-        }
-        return p;
-    }
-
+class Bytes : public Object, virtual public IBytes {
   public:
-    Bytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = snmalloc::ThreadAlloc::get()->alloc(len);
+    Bytes(const void* data, size_t len) noexcept {
+        this->buf = operator new(len);
         this->len = len;
-        this->nucl.accountant.mem += len;
         if (data)
-            memcpy(this->buf, data, len);
+            round_copy(this->buf, data, len);
     }
 
     ~Bytes() override {
-        snmalloc::ThreadAlloc::get()->dealloc(this->buf);
-        this->nucl.accountant.mem -= this->len;
+        operator delete(this->buf);
     }
 
     void clone(IObject** out) const noexcept final {
-        create_instance<Bytes>(out, this->nucl, this->buf, this->len);
+        create_instance<Bytes>(out, this->buf, this->len);
     }
 
     void realloc(size_t new_size) noexcept final {
-        this->nucl.accountant.mem -= this->len;
-        this->buf = realloc(this->buf, new_size);
-        this->nucl.accountant.mem += this->len = new_size;
+        this->buf = re_alloc(this->buf, new_size);
     }
 };
 
-class AlignedBytes final : public Object, public IAlignedBytes, public Shuttle {
+class Array : public Bytes, public IArray {
   public:
-    AlignedBytes(Nucleus& nucl, const void* data, size_t len) noexcept : Shuttle(nucl) {
-        this->buf = snmalloc::ThreadAlloc::get()->alloc(snmalloc::aligned_size(static_cast<size_t>(alignment), len));
-#ifdef __clang__
-        auto buf = __builtin_assume_aligned(this->buf, static_cast<size_t>(alignment));
-#endif
-        this->len = len;
-        this->nucl.accountant.mem += len;
-        if (data)
-#ifdef __clang__
-            __builtin_mempcpy(buf, data, len);
-#else
-            memcpy(this->buf, data, len);
-#endif
-    }
-
-    ~AlignedBytes() final {
-        snmalloc::ThreadAlloc::get()->dealloc(this->buf);
-        this->nucl.accountant.mem -= this->len;
-    }
-
-    void clone(IObject** out) const noexcept final {
-        create_instance<AlignedBytes>(out, this->nucl, this->buf, this->len);
-    }
-
-    void realloc(size_t new_size) noexcept final {
-        not_implemented();
-    }
-};
-
-class NumberArray final : public Bytes, public INumberArray {
-  public:
-    NumberArray(Nucleus& nucl, SampleType sample_type, const void* data, size_t len) noexcept : Bytes(nucl, data, len) {
-        this->sample_type = sample_type;
+    Array(const std::type_info* type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count) {
+        this->element_type = type;
     }
 };
 
 void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept {
-    create_instance<Bytes>(out, *this, data, len);
+    create_instance<Bytes>(out, data, len);
 }
 
-void Nucleus::create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept {
-    create_instance<AlignedBytes>(out, *this, data, len);
-}
-
-void Nucleus::create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept {
-    create_instance<NumberArray>(out, *this, sample_type, data, len);
+void Nucleus::create_array(const std::type_info* type, const void* data, size_t bytes_count, IArray** out) noexcept {
+    create_instance<Array>(out, type, data, bytes_count);
 }
 
 class Frame final : public Object, public IFrame, public Shuttle {
     static constexpr unsigned max_plane_count = 3;
 
     FrameInfo fi;
-    std::array<cat_ptr<const IAlignedBytes>, max_plane_count> planes;
+    std::array<cat_ptr<const IBytes>, max_plane_count> planes;
     std::array<size_t, max_plane_count> strides;
     cat_ptr<const ITable> props;
 
@@ -117,12 +55,12 @@ class Frame final : public Object, public IFrame, public Shuttle {
     }
 
   public:
-    const IAlignedBytes* get_plane(unsigned idx) const noexcept final {
+    const IBytes* get_plane(unsigned idx) const noexcept final {
         check_idx(idx);
         return planes[idx].get();
     };
 
-    IAlignedBytes* get_plane_mut(unsigned idx) noexcept final {
+    IBytes* get_plane_mut(unsigned idx) noexcept final {
         check_idx(idx);
         auto& plane = planes[idx];
         auto plane_mut = plane.usurp_or_clone();
@@ -130,7 +68,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
         return plane_mut.get();
     }
 
-    void set_plane(unsigned idx, const IAlignedBytes* in, size_t stride) noexcept final {
+    void set_plane(unsigned idx, const IBytes* in, size_t stride) noexcept final {
         check_idx(idx);
         planes[idx] = in;
         strides[idx] = stride;
@@ -159,7 +97,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
         props = new_props;
     }
 
-    Frame(Nucleus& nucl, FrameInfo fi, const IAlignedBytes** in_planes, const size_t* in_strides,
+    Frame(Nucleus& nucl, FrameInfo fi, const IBytes** in_planes, const size_t* in_strides,
           const ITable* in_props) noexcept
         : Shuttle(nucl), fi(fi) {
         auto count = num_planes(fi.format);
@@ -170,7 +108,7 @@ class Frame final : public Object, public IFrame, public Shuttle {
             } else {
                 auto stride = default_stride(fi, idx);
                 size_t len = stride * fi.height;
-                nucl.create_aligned_bytes(nullptr, len, planes[idx].put());
+                nucl.create_bytes(nullptr, len, planes[idx].put());
                 strides[idx] = stride;
             }
         }
@@ -181,11 +119,11 @@ class Frame final : public Object, public IFrame, public Shuttle {
     }
 
     void clone(IObject** out) const noexcept final {
-        create_instance<Frame>(out, this->nucl, fi, (const IAlignedBytes**)planes.data(), strides.data(), props.get());
+        create_instance<Frame>(out, this->nucl, fi, (const IBytes**)planes.data(), strides.data(), props.get());
     }
 };
 
-void Nucleus::create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
+void Nucleus::create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                            IFrame** out) noexcept {
     create_instance<Frame>(out, *this, fi, planes, strides, props);
 }

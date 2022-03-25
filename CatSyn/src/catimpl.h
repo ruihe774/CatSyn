@@ -1,12 +1,11 @@
 #pragma once
 
-#include <array>
 #include <optional>
 #include <stdexcept>
 #include <thread>
 #include <vector>
+#include <variant>
 
-#include <boost/container/flat_map.hpp>
 #include <boost/container/small_vector.hpp>
 
 #include <fmt/format.h>
@@ -36,14 +35,9 @@ class Shuttle {
     explicit Shuttle(Nucleus& nucl) noexcept;
 };
 
-void write_err(const char* s, size_t n) noexcept;
-
-void thread_init() noexcept;
-
 class JThread final : public std::jthread {
     template<typename F, typename... Args>
     static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
-        thread_init();
         try {
             std::invoke(f, std::forward<Args>(args)...);
         } catch (StopRequested&) {}
@@ -81,25 +75,27 @@ class Table final : public Object, public ITable {
         vector_type;
     vector_type vec;
 
-    size_t norm_ref(size_t ref) const noexcept;
-    void expand(size_t len) noexcept;
+    static constexpr size_t npos = static_cast<size_t>(-1);
 
   public:
-    explicit Table(vector_type vec) noexcept;
+    explicit Table(const Table& other) noexcept;
     explicit Table(size_t reserve_capacity) noexcept;
+    void clone(IObject** out) const noexcept final;
+    const IObject* get(size_t ref, const char** key_out) const noexcept final;
+    void set(size_t ref, const IObject* obj, const char* key) noexcept final;
+    size_t erase(size_t ref) noexcept final;
+    size_t find(const char* key) const noexcept final;
     size_t size() const noexcept final;
     void clear() noexcept final;
-    const IObject* get(size_t ref) const noexcept final;
-    void set(size_t ref, const IObject* obj) noexcept final;
-    size_t get_ref(const char* key) const noexcept final;
-    const char* get_key(size_t ref) const noexcept final;
-    void set_key(size_t ref, const char* key) noexcept final;
-    void clone(IObject** out) const noexcept final;
+    size_t begin() const noexcept final;
+    size_t end() const noexcept final;
+    size_t next(size_t ref) const noexcept final;
+    size_t prev(size_t ref) const noexcept final;
 };
 
 class Substrate final : public Object, public ISubstrate, public Shuttle {
   public:
-    boost::container::small_flat_map<std::thread::id, cat_ptr<IFilter>, 64> filters;
+    cat_ptr<IFilter> filter;
 
     VideoInfo get_video_info() const noexcept final;
     INucleus* get_nucleus() noexcept final;
@@ -112,51 +108,34 @@ struct FrameInstanceTickGreater {
     bool operator()(const FrameInstance* l, const FrameInstance* r) noexcept;
 };
 
-class MaintainTask {
-  public:
-    static constexpr size_t payload_size = sizeof(std::exception_ptr);
+struct Construct {
+    cat_ptr<Substrate> substrate;
+    size_t frame_idx;
+    std::unique_ptr<IOutput::Callback> callback;
+};
+struct Notify {
+    FrameInstance* inst;
+    std::exception_ptr exc;
+};
 
-  private:
-    uintptr_t p;
-    size_t v;
-    std::array<std::byte, payload_size> pl;
-
-  public:
-    enum class Type {
-        Construct,
-        Notify,
-    };
-
-    void* get_pointer() const noexcept;
-    size_t get_value() const noexcept;
-    Type get_type() const noexcept;
-    std::array<std::byte, payload_size> get_payload() const noexcept;
-
-    static MaintainTask create(Type, void*, size_t, std::array<std::byte, payload_size> = {}) noexcept;
+struct MaintainTask : std::variant<Construct, Notify> {
+    explicit MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
+    explicit MaintainTask(FrameInstance* inst, std::exception_ptr exc = {}) noexcept;
 };
 
 struct CallbackTask {
-    IOutput::Callback* callback;
-    const IFrame* frame;
-    std::array<std::byte, MaintainTask::payload_size> exc;
+    IOutput::Callback callback;
+    cat_ptr<const IFrame> frame;
+    std::exception_ptr exc;
 };
-
-NucleusConfig get_default_config() noexcept;
 
 class Nucleus final : public Object, public INucleus, public IFactory {
   public:
-    struct Accountant {
-        size_t mem{0};
-        ~Accountant();
-    };
-
     Logger logger;
-    Accountant accountant;
-    NucleusConfig config{get_default_config()};
 
-    TableView<Table> finders{nullptr};
-    TableView<Table> ribosomes{nullptr};
-    TableView<Table> enzymes{nullptr};
+    cat_ptr<Table> finders;
+    cat_ptr<Table> ribosomes;
+    cat_ptr<Table> enzymes;
 
     SCQueue<MaintainTask> maintain_queue;
     SCQueue<CallbackTask> callback_queue;
@@ -168,8 +147,6 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     Nucleus();
     ~Nucleus() final;
 
-    void calling_thread_init() noexcept final;
-
     IFactory* get_factory() noexcept final;
     ILogger* get_logger() noexcept final;
 
@@ -177,10 +154,9 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     ITable* get_ribosomes() noexcept final;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
-    void create_aligned_bytes(const void* data, size_t len, IAlignedBytes** out) noexcept final;
-    void create_number_array(SampleType sample_type, const void* data, size_t len, INumberArray** out) noexcept final;
+    void create_array(const std::type_info* type, const void* data, size_t bytes_count, IArray** out) noexcept final;
 
-    void create_frame(FrameInfo fi, const IAlignedBytes** planes, const size_t* strides, const ITable* props,
+    void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                       IFrame** out) noexcept final;
     void create_table(size_t reserve_capacity, ITable** out) noexcept final;
 

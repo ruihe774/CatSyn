@@ -2,73 +2,89 @@
 
 #include <catimpl.h>
 
-size_t Table::norm_ref(size_t ref) const noexcept {
+const IObject* Table::get(size_t ref, const char** key_out) const noexcept {
+    if (ref >= vec.size())
+        return nullptr;
+    auto&& item = vec[ref];
+    if (key_out && item.first)
+        *key_out = item.first.value().c_str();
+    return item.second.get();
+}
+
+void Table::set(size_t ref, const IObject* obj, const char* key) noexcept {
     if (ref == npos)
-        return vec.size();
-    else
-        return ref;
+        ref = vec.size();
+    if (ref >= vec.size())
+        vec.resize(ref + 1);
+    auto&& item = vec[ref];
+    if (key)
+        item.first = key;
+    item.second = obj;
 }
 
-void Table::expand(size_t len) noexcept {
-    if (len > vec.size())
-        vec.resize(len);
+size_t Table::erase(size_t ref) noexcept {
+    if (ref >= vec.size())
+        return npos;
+    vec[ref] = {};
+    return next(ref);
 }
 
-Table::Table(vector_type vec) noexcept : vec(std::move(vec)) {}
-Table::Table(size_t reserve_capacity) noexcept {
-    vec.reserve(reserve_capacity);
+size_t Table::find(const char* key) const noexcept {
+    size_t ref = 0;
+    for (auto&& item : vec) {
+        if (item.first && item.first.value() == key)
+            return ref;
+        ++ref;
+    }
+    return npos;
 }
 
 size_t Table::size() const noexcept {
-    return vec.size();
+    size_t size = 0;
+    for (auto ref = begin(), ed = end(); ref != ed; ++size)
+        ref = next(ref);
+    return size;
 }
 
 void Table::clear() noexcept {
     vec.clear();
 }
 
-const IObject* Table::get(size_t ref) const noexcept {
-    ref = norm_ref(ref);
-    if (ref >= size())
-        return nullptr;
-    else
-        return vec[ref].second.get();
+size_t Table::begin() const noexcept {
+    return next(npos);
 }
 
-void Table::set(size_t ref, const IObject* obj) noexcept {
-    ref = norm_ref(ref);
-    expand(ref + 1);
-    vec[ref].second = obj;
+size_t Table::end() const noexcept {
+    return npos;
 }
 
-size_t Table::get_ref(const char* key) const noexcept {
-    if (!key)
-        return npos;
-    std::string_view keysv{key};
-    for (size_t i = 0; i < size(); ++i)
-        if (const auto& item_key = vec[i].first; item_key && item_key.value() == keysv)
+size_t Table::next(size_t ref) const noexcept {
+    for (auto i = ref + 1; i < vec.size(); ++i)
+        if (vec[i].first && vec[i].second)
             return i;
     return npos;
 }
 
-const char* Table::get_key(size_t ref) const noexcept {
-    ref = norm_ref(ref);
-    if (ref >= size())
-        return nullptr;
-    if (const auto& item_key = vec[ref].first; item_key)
-        return item_key.value().c_str();
-    else
-        return nullptr;
+size_t Table::prev(size_t ref) const noexcept {
+    for (auto i = static_cast<std::make_signed_t<size_t>>(ref) - 1; i >= 0; --i)
+        if (vec[i].first && vec[i].second)
+            return i;
+    return npos;
 }
 
-void Table::set_key(size_t ref, const char* key) noexcept {
-    ref = norm_ref(ref);
-    expand(ref + 1);
-    vec[ref].first = key ? std::make_optional(key) : std::nullopt;
+Table::Table(const Table& other) noexcept {
+    const char* key;
+    vec.reserve(other.vec.size());
+    for (auto ref = other.begin(), ed = other.end(); ref != ed; ref = next(ref))
+        vec.emplace_back(key, other.get(ref, &key));
+}
+
+Table::Table(size_t reserve_capacity) noexcept {
+    vec.reserve(reserve_capacity);
 }
 
 void Table::clone(IObject** out) const noexcept {
-    create_instance<Table>(out, vec);
+    create_instance<Table>(out, *this);
 }
 
 void Nucleus::create_table(size_t reserve_capacity, ITable** out) noexcept {

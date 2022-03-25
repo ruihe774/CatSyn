@@ -92,3 +92,33 @@ void operator delete(void* ptr, std::align_val_t, const std::nothrow_t&) noexcep
 void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t&) noexcept {
     return operator delete(ptr);
 }
+
+size_t round_size(size_t size) noexcept {
+    return snmalloc::round_size(size);
+}
+
+void round_copy(void* __restrict dst, const void* __restrict src, size_t size) noexcept {
+    if (size < 32)
+        for (size_t i = 0; i < size; ++i)
+            static_cast<char*>(dst)[i] = static_cast<const char*>(src)[i];
+    else if (size <= 256 * 1024)
+        for (size_t i = 0; i < (size + 31) / 32; ++i) {
+            auto m = _mm256_load_si256((const __m256i*)(src) + i);
+            _mm256_store_si256((__m256i*)(dst) + i, m);
+        }
+    else
+        for (size_t i = 0; i < (size + 31) / 32; ++i) {
+            auto m = _mm256_load_si256((const __m256i*)(src) + i);
+            _mm256_stream_si256((__m256i*)(dst) + i, m);
+        }
+}
+
+void* re_alloc(void* ptr, size_t new_size) noexcept {
+    auto old_size = snmalloc::ThreadAlloc::get()->alloc_size(ptr);
+    if (round_size(old_size) >= new_size)
+        return ptr;
+    auto new_ptr = operator new(new_size);
+    round_copy(new_ptr, ptr, old_size);
+    operator delete(ptr);
+    return new_ptr;
+}

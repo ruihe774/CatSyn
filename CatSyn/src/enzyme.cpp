@@ -2,8 +2,9 @@
 #include <map>
 #include <string_view>
 
-#include <boost/algorithm/string/predicate.hpp>
-#include <boost/dll.hpp>
+#include <string.h>
+
+#include <boost/dll/smart_library.hpp>
 
 #include <catimpl.h>
 
@@ -54,7 +55,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
                 try {
                     for (auto&& entry : std::filesystem::directory_iterator(path))
                         if (auto&& dll_path = entry.path();
-                            entry.is_regular_file() && boost::iequals(dll_path.extension().string(), ".dll"))
+                            entry.is_regular_file() && _stricmp(dll_path.extension().string().c_str(), ".dll") == 0)
                             tokens.emplace_back(prefix + dll_path.string());
                 } catch (std::filesystem::filesystem_error& err) {
                     this->nucl.logger.log(
@@ -75,7 +76,7 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
 }
 
 class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
-    std::map<IObject*, boost::dll::shared_library> loaded;
+    std::map<IObject*, boost::dll::experimental::smart_library> loaded;
 
     [[noreturn]] static void hydrolyze_non_unique() {
         throw std::runtime_error("attempt to hydrolyze an enzyme by non-unique reference");
@@ -88,11 +89,10 @@ class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
 
     void synthesize_enzyme(const char* token, IObject** out) noexcept final {
         *out = nullptr;
-        if (boost::starts_with(token, "dll:"))
+        if (std::string_view{token}.starts_with("dll:"))
             try {
-                boost::dll::shared_library lib(token + 4);
-                auto init_func = lib.get<void(INucleus*, IObject**)>(
-                    "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z");
+                boost::dll::experimental::smart_library lib(token + 4);
+                auto init_func = lib.get_function<void(INucleus*, IObject**)>("catsyn_enzyme_init");
                 init_func(&this->nucl, out);
                 if (*out)
                     loaded.emplace(*out, std::move(lib));
@@ -141,12 +141,10 @@ void Nucleus::synthesize_enzymes() noexcept {
     auto old_refcount = this->acquire_refcount();
 
     std::vector<std::string_view> tokens;
-    for (size_t ref = 0; ref < finders.size(); ++ref) {
-        auto finder = finders.get<IEnzymeFinder>(ref);
-        if (!finder)
-            continue;
+    for (size_t ref = finders->begin(), ed = finders->end(); ref != ed; ref = finders->next(ref)) {
+        auto finder = &const_cast<IEnzymeFinder&>(dynamic_cast<const IEnzymeFinder&>(*finders->get(ref, nullptr)));
         size_t size;
-        auto p = finder.clone()->find(&size);
+        auto p = finder->find(&size);
         tokens.reserve(tokens.size() + size);
         for (size_t i = 0; i < size; ++i)
             tokens.emplace_back(p[i]);
@@ -156,12 +154,10 @@ void Nucleus::synthesize_enzymes() noexcept {
     for (auto token_sv : tokens) {
         // we are sure that tokens are null terminated!
         auto token = token_sv.data();
-        for (size_t ref = 0; ref < ribosomes.size(); ++ref) {
-            auto ribosome = ribosomes.get<IRibosome>(ref);
-            if (!ribosome)
-                continue;
+        for (size_t ref = ribosomes->begin(), ed = ribosomes->end(); ref != ed; ref = ribosomes->next(ref)) {
+            auto ribosome = &const_cast<IRibosome&>(dynamic_cast<const IRibosome&>(*ribosomes->get(ref, nullptr)));
             cat_ptr<IObject> obj;
-            ribosome.clone()->synthesize_enzyme(token, obj.put());
+            ribosome->synthesize_enzyme(token, obj.put());
             if (obj) {
                 // TODO: hydrolyze overwritten enzymes and ribosomes
                 if (auto enzyme = obj.try_query<IEnzyme>(); enzyme) {
@@ -170,17 +166,14 @@ void Nucleus::synthesize_enzymes() noexcept {
                     if (jt != ezs.end())
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: enzyme '{}' is registered multiple times", id));
-                    else
-                        logger.log(LogLevel::DEBUG, format_c("Nucleus: enzyme '{}' synthesized", id));
                     ezs.emplace_hint(jt, id, std::move(enzyme));
                 } else if (auto ribosome = obj.try_query<IRibosome>(); ribosome) {
                     auto id = ribosome->get_identifier();
-                    if (ribosomes.get<IObject>(id))
+                    auto ref = ribosomes->find(id);
+                    if (ref != ribosomes->end())
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: ribosome '{}' is registered multiple times", id));
-                    else
-                        logger.log(LogLevel::DEBUG, format_c("Nucleus: ribosome '{}' synthesized", id));
-                    ribosomes.set(id, ribosome.get());
+                    ribosomes->set(ref, ribosome.get(), id);
                 } else
                     not_enzyme_nor_ribosome();
                 goto synthesized;
@@ -189,13 +182,9 @@ void Nucleus::synthesize_enzymes() noexcept {
         logger.log(LogLevel::WARNING, format_c("Nucleus: enzyme with token '{}' cannot be synthesized", token));
     synthesized:;
     }
-    size_t ref = 0;
-    for (const auto& entry : ezs) {
+    for (const auto& entry : ezs)
         // we are sure that keys are null terminated!
-        enzymes.table->set_key(ref, entry.first.data());
-        enzymes.table->set(ref, entry.second.get());
-        ++ref;
-    }
+        enzymes->set(enzymes->end(), entry.second.get(), entry.first.data());
 
     auto new_refcount = this->acquire_refcount();
     if (old_refcount != new_refcount)

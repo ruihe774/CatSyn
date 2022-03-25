@@ -82,13 +82,14 @@ class ILogger : virtual public IObject {
 
 class ITable : virtual public IObject {
   public:
-    static constexpr size_t npos = static_cast<size_t>(-1);
-
     virtual const IObject* get(size_t ref, const char** key_out) const noexcept = 0;
-    virtual void set(size_t ref, const char* key, const IObject* obj) noexcept = 0;
+    virtual void set(size_t ref, const IObject* obj, const char* key) noexcept = 0;
+    virtual size_t erase(size_t ref) noexcept = 0;
     virtual size_t find(const char* key) const noexcept = 0;
     virtual size_t size() const noexcept = 0;
     virtual void clear() noexcept = 0;
+    virtual size_t begin() const noexcept = 0;
+    virtual size_t end() const noexcept = 0;
     virtual size_t next(size_t ref) const noexcept = 0;
     virtual size_t prev(size_t ref) const noexcept = 0;
 };
@@ -125,7 +126,7 @@ class IArray : virtual public IBytes {
     }
 
   public:
-    const std::type_info& element_type;
+    const std::type_info* element_type;
 
     size_t bytes_count() const noexcept {
         return size();
@@ -203,7 +204,7 @@ class IEnzyme : virtual public IRef {
 class IFactory : virtual public IRef {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
-    virtual void create_array(const std::type_info& type, const void* data, size_t bytes_count,
+    virtual void create_array(const std::type_info* type, const void* data, size_t bytes_count,
                               IArray** out) noexcept = 0;
     virtual void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
@@ -215,7 +216,7 @@ class IFactory : virtual public IRef {
 
 struct ArgSpec {
     const char* name;
-    const std::type_info& type;
+    const std::type_info* type;
     bool array;
     bool required;
 };
@@ -280,8 +281,6 @@ struct Version {
 
 class INucleus : virtual public IRef {
   public:
-    virtual void calling_thread_init() noexcept = 0;
-
     virtual IFactory* get_factory() noexcept = 0;
     virtual ILogger* get_logger() noexcept = 0;
 
@@ -304,8 +303,5 @@ class INucleus : virtual public IRef {
 
 CAT_API void create_nucleus(INucleus** out) noexcept;
 CAT_API Version get_version() noexcept;
-
-// TODO: it doesn't work
-CAT_API const char* exception_ptr_what(std::exception_ptr excptr) noexcept;
 
 } // namespace catsyn
