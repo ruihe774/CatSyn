@@ -98,10 +98,6 @@ Logger::~Logger() {
     queue.request_stop();
 }
 
-[[noreturn]] static void log_failed() {
-    throw std::runtime_error("log failed");
-}
-
 void Logger::log(LogLevel level, const char* msg) const noexcept {
     if (level < filter_level)
         return;
