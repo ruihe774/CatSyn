@@ -34,10 +34,8 @@ target_include_directories(catsyn PRIVATE src)
 target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(catsyn PRIVATE allostery)
 target_link_libraries(catsyn PRIVATE fmt)
-target_link_libraries(catsyn PRIVATE
-    Boost::container
-    Boost::dll
-)
+target_link_libraries(catsyn PRIVATE WIL)
+target_link_libraries(catsyn PRIVATE Boost::container)
 
 configure_file(src/catcfg.h.in catcfg.h)
 

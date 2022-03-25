@@ -4,11 +4,11 @@
 
 #include <string.h>
 
-#include <boost/dll/smart_library.hpp>
+#include <Windows.h>
+
+#include <wil/resource.h>
 
 #include <catimpl.h>
-
-#include <Windows.h>
 
 extern "C" IMAGE_DOS_HEADER __ImageBase;
 
@@ -17,6 +17,14 @@ static std::filesystem::path get_current_dll_filename() noexcept {
     wchar_t wbuf[2048];
     GetModuleFileNameW(current_module, wbuf, sizeof(wbuf));
     if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+        insufficient_buffer();
+    return wbuf;
+}
+
+static wchar_t* u2w(const char* s) noexcept {
+    thread_local wchar_t wbuf[2048];
+    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, wbuf, sizeof(wbuf));
+    if (wlen == 0)
         insufficient_buffer();
     return wbuf;
 }
@@ -55,7 +63,7 @@ class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttl
                 try {
                     for (auto&& entry : std::filesystem::directory_iterator(path))
                         if (auto&& dll_path = entry.path();
-                            entry.is_regular_file() && _stricmp(dll_path.extension().string().c_str(), ".dll") == 0)
+                            entry.is_regular_file() && _wcsicmp(dll_path.extension().c_str(), L".dll") == 0)
                             tokens.emplace_back(prefix + dll_path.string());
                 } catch (std::filesystem::filesystem_error& err) {
                     this->nucl.logger.log(
@@ -76,7 +84,7 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
 }
 
 class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
-    std::map<IObject*, boost::dll::experimental::smart_library> loaded;
+    std::map<IObject*, wil::unique_hmodule> loaded;
 
     [[noreturn]] static void hydrolyze_non_unique() {
         throw std::runtime_error("attempt to hydrolyze an enzyme by non-unique reference");
@@ -89,15 +97,19 @@ class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
 
     void synthesize_enzyme(const char* token, IObject** out) noexcept final {
         *out = nullptr;
-        if (std::string_view{token}.starts_with("dll:"))
-            try {
-                boost::dll::experimental::smart_library lib(token + 4);
-                auto init_func = lib.get_function<void(INucleus*, IObject**)>("catsyn_enzyme_init");
-                init_func(&this->nucl, out);
-                if (*out)
-                    loaded.emplace(*out, std::move(lib));
-            } catch (boost::dll::fs::system_error&) {
-            }
+        if (std::string_view{token}.starts_with("dll:")) {
+            auto lib = wil::unique_hmodule{LoadLibraryExW(
+                u2w(token + 4), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)};
+            if (!lib)
+                return;
+            auto init_func = reinterpret_cast<void (*)(INucleus*, IObject**)>(
+                GetProcAddress(lib.get(), "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z"));
+            if (!init_func)
+                return;
+            init_func(&this->nucl, out);
+            if (*out)
+                loaded.emplace(*out, std::move(lib));
+        }
     }
 
     void hydrolyze_enzyme(IObject** inout) noexcept final {

@@ -6,8 +6,12 @@ const IObject* Table::get(size_t ref, const char** key_out) const noexcept {
     if (ref >= vec.size())
         return nullptr;
     auto&& item = vec[ref];
-    if (key_out && item.first)
-        *key_out = item.first.value().c_str();
+    if (key_out) {
+        if (item.first)
+            *key_out = item.first.value().c_str();
+        else
+            *key_out = nullptr;
+    }
     return item.second.get();
 }
 
@@ -60,14 +64,14 @@ size_t Table::end() const noexcept {
 
 size_t Table::next(size_t ref) const noexcept {
     for (auto i = ref + 1; i < vec.size(); ++i)
-        if (vec[i].first && vec[i].second)
+        if (vec[i].second)
             return i;
     return npos;
 }
 
 size_t Table::prev(size_t ref) const noexcept {
     for (auto i = static_cast<std::make_signed_t<size_t>>(ref) - 1; i >= 0; --i)
-        if (vec[i].first && vec[i].second)
+        if (vec[i].second)
             return i;
     return npos;
 }

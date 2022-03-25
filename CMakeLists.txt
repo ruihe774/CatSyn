@@ -17,6 +17,10 @@ add_subdirectory(boost EXCLUDE_FROM_ALL)
 
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
 
+set(WIL_BUILD_PACKAGING OFF CACHE BOOL "")
+set(WIL_BUILD_TESTS OFF CACHE BOOL "")
+add_subdirectory(wil EXCLUDE_FROM_ALL)
+
 add_subdirectory(CatSyn)
 
 add_subdirectory(Metalloporphyrin)
