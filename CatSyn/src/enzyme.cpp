@@ -29,7 +29,7 @@ static wchar_t* u2w(const char* s) noexcept {
     return wbuf;
 }
 
-class DllEnzymeFinder final : public Object, public IEnzymeFinder, public Shuttle {
+class DllEnzymeFinder final : public Object, virtual public IEnzymeFinder, public Shuttle {
     std::filesystem::path path;
     std::vector<std::string> tokens;
     std::unique_ptr<const char*[]> tokens_c_str;
@@ -83,7 +83,7 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
     create_instance<DllEnzymeFinder>(out, *this, path);
 }
 
-class CatSynV1Ribosome final : public Object, public IRibosome, public Shuttle {
+class CatSynV1Ribosome final : public Object, virtual public IRibosome, public Shuttle {
     std::map<IObject*, wil::unique_hmodule> loaded;
 
     [[noreturn]] static void hydrolyze_non_unique() {

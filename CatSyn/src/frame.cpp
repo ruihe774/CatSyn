@@ -40,7 +40,7 @@ class Bytes : public Object, virtual public IBytes {
     }
 };
 
-class Array : public Bytes, public IArray {
+class Array : public Bytes, virtual public IArray {
     const std::type_info& type;
   public:
     Array(const std::type_info& type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count), type(type) {}
@@ -58,7 +58,7 @@ void Nucleus::create_array(const std::type_info& type, const void* data, size_t 
     create_instance<Array>(out, type, data, bytes_count);
 }
 
-class Frame final : public Object, public IFrame, public Shuttle {
+class Frame final : public Object, virtual public IFrame, public Shuttle {
     static constexpr unsigned max_plane_count = 3;
 
     FrameInfo fi;

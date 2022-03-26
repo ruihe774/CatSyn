@@ -290,7 +290,7 @@ void callbacker(Nucleus& nucl) {
     nucl.callback_queue.stream([](CallbackTask&& task) { task.callback(task.frame.get(), task.exc); });
 }
 
-class Output final : public Object, public IOutput, public Shuttle {
+class Output final : public Object, virtual public IOutput, public Shuttle {
   public:
     cat_ptr<Substrate> substrate;
 

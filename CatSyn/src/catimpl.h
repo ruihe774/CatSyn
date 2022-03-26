@@ -55,7 +55,7 @@ class JThread final : public std::jthread {
         : std::jthread(proxy<F, unbox_reference_t<Args>...>, f, std::forward<Args>(args)...) {}
 };
 
-class Logger final : public Object, public ILogger {
+class Logger final : public Object, virtual public ILogger {
     mutable SCQueue<uintptr_t> queue;
     cat_ptr<ILogSink> sink;
     LogLevel filter_level;
@@ -70,7 +70,7 @@ class Logger final : public Object, public ILogger {
     ~Logger() final;
 };
 
-class Table final : public Object, public ITable {
+class Table final : public Object, public virtual ITable {
     typedef boost::container::small_vector<std::pair<std::optional<std::string>, cat_ptr<const IObject>>, 16>
         vector_type;
     vector_type vec;
@@ -93,7 +93,7 @@ class Table final : public Object, public ITable {
     size_t prev(size_t ref) const noexcept final;
 };
 
-class Substrate final : public Object, public ISubstrate, public Shuttle {
+class Substrate final : public Object, virtual public ISubstrate, public Shuttle {
   public:
     cat_ptr<IFilter> filter;
 
@@ -129,7 +129,7 @@ struct CallbackTask {
     std::exception_ptr exc;
 };
 
-class Nucleus final : public Object, public INucleus, public IFactory {
+class Nucleus final : public Object, virtual public INucleus, virtual public IFactory {
   public:
     Logger logger;
 
