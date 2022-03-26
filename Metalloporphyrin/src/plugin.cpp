@@ -24,7 +24,7 @@ struct VSEnzyme final : public Object, public catsyn::IEnzyme {
         return funcs.get();
     }
 
-    explicit VSEnzyme(const char* path) noexcept : path(path), funcs(nullptr) {
+    explicit VSEnzyme(const char* path) noexcept : funcs(nullptr), path(path) {
         core->nucl->get_factory()->create_table(0, funcs.put());
 #ifdef _WIN32
         std::replace(this->path.begin(), this->path.end(), '\\', '/');

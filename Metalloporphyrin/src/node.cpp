@@ -165,15 +165,15 @@ void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit in
     filter->flags = catsyn::FilterFlags((flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
                                         (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded));
     filter->getFrame = getFrame;
+    filter->freer = freer;
     filter->instanceData = instanceData;
     filter->is_source_filter = false;
     out->get_mut()->set(out->table->find("clip"), filter, "clip");
 }
 
 VSFilter::~VSFilter() {
-    // XXX
-//    if (freer)
-//        freer(instanceData, core.get(), &api);
+    if (freer)
+        freer(instanceData, core.get(), &api);
 }
 
 catsyn::FilterFlags VSFilter::get_filter_flags() const noexcept {
