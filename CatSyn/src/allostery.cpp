@@ -2,6 +2,8 @@
 
 #include <snmalloc.h>
 
+#include <allostery.h>
+
 void* operator new(size_t count) {
     auto ptr = operator new(count, std::nothrow);
     if (ptr) [[likely]]
@@ -29,7 +31,7 @@ void* operator new[](size_t count, std::align_val_t al) {
 }
 
 void* operator new(size_t count, const std::nothrow_t& tag) noexcept {
-    return snmalloc::ThreadAlloc::get()->alloc(count);
+    return alloc(count);
 }
 
 void* operator new[](size_t count, const std::nothrow_t& tag) noexcept {
@@ -46,7 +48,7 @@ void* operator new[](size_t count, std::align_val_t al, const std::nothrow_t& ta
 
 void operator delete(void* ptr) noexcept {
     if (ptr) [[likely]]
-        snmalloc::ThreadAlloc::get()->dealloc(ptr);
+        dealloc(ptr);
 }
 
 void operator delete[](void* ptr) noexcept {
@@ -114,7 +116,7 @@ void round_copy(void* __restrict dst, const void* __restrict src, size_t size) n
 }
 
 void* re_alloc(void* ptr, size_t new_size) noexcept {
-    auto old_size = snmalloc::ThreadAlloc::get()->alloc_size(ptr);
+    auto old_size = alloc_size(ptr);
     if (round_size(old_size) >= new_size)
         return ptr;
     auto new_ptr = operator new(new_size);
@@ -122,3 +124,17 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
     operator delete(ptr);
     return new_ptr;
 }
+
+#ifdef ALLOSTERY_IMPL
+ALLOSTERY_API void* alloc(size_t size) {
+    return snmalloc::ThreadAlloc::get()->alloc(size);
+}
+
+ALLOSTERY_API void dealloc(void* ptr) {
+    return snmalloc::ThreadAlloc::get()->dealloc(ptr);
+}
+
+ALLOSTERY_API size_t alloc_size(void* ptr) {
+    return snmalloc::ThreadAlloc::get()->alloc_size(ptr);
+}
+#endif

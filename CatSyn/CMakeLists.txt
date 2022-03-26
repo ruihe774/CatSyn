@@ -6,14 +6,22 @@ project(CatSyn
     DESCRIPTION "Catalyzed video processing framework"
 )
 
-add_library(allostery STATIC
+add_library(allostery_lib STATIC
     src/allostery.cpp
 )
-target_sources(allostery PUBLIC
+target_sources(allostery_lib PUBLIC
     src/allostery.h
 )
-target_include_directories(allostery PUBLIC src)
+target_include_directories(allostery_lib PUBLIC src)
+target_link_libraries(allostery_lib PRIVATE snmalloc_lib)
+add_library(allostery SHARED
+    src/allostery.cpp
+    src/allostery.h
+)
+target_include_directories(allostery PRIVATE src)
 target_link_libraries(allostery PRIVATE snmalloc_lib)
+target_link_libraries(allostery INTERFACE allostery_lib)
+target_compile_definitions(allostery PRIVATE ALLOSTERY_IMPL)
 
 add_library(catsyn SHARED
     src/catimpl.h
