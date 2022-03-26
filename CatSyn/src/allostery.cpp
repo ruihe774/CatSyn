@@ -99,14 +99,40 @@ size_t round_size(size_t size) noexcept {
     return snmalloc::round_size(size);
 }
 
-void round_copy(void* __restrict dst, const void* __restrict src, size_t size) noexcept {
-    if (size < 32 || reinterpret_cast<uintptr_t>(dst) % 32 || reinterpret_cast<uintptr_t>(src) % 32)
-        memcpy(dst, src, size);
-    else if (size <= 256 * 1024)
-        for (size_t i = 0; i < (size + 31) / 32; ++i) {
-            auto m = _mm256_load_si256((const __m256i*)(src) + i);
-            _mm256_store_si256((__m256i*)(dst) + i, m);
+template<size_t size> __forceinline void copy_one(void* __restrict dst, const void* __restrict src) {
+    struct Block {
+        char data[size];
+    };
+    auto* d = static_cast<Block*>(dst);
+    auto* s = static_cast<const Block*>(src);
+    *d = *s;
+}
+
+template<size_t size, size_t word> __forceinline void small_copy(void* dst, const void* src) {
+    if constexpr (size > 0) {
+        if constexpr (size >= word) {
+            copy_one<word>(dst, src);
+            small_copy<size - word, word>(static_cast<char*>(dst) + word, static_cast<const char*>(src) + word);
+        } else {
+            small_copy<size, word / 2>(dst, src);
         }
+    }
+}
+
+template<size_t size, size_t word = size> __forceinline void small_copies(void* dst, const void* src, size_t len) {
+    if (len == size) {
+        small_copy<size, word>(dst, src);
+    }
+    if constexpr (size > 0) {
+        small_copies<size - 1, word>(dst, src, len);
+    }
+}
+
+void round_copy(void* __restrict dst, const void* __restrict src, size_t size) noexcept {
+    if (size < 32)
+        small_copies<32>(dst, src, size);
+    else if (size <= 256 * 1024)
+        __movsb(static_cast<unsigned char*>(dst), static_cast<const unsigned char*>(src), size);
     else
         for (size_t i = 0; i < (size + 31) / 32; ++i) {
             auto m = _mm256_load_si256((const __m256i*)(src) + i);

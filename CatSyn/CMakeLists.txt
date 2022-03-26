@@ -14,9 +14,6 @@ target_sources(allostery_lib PUBLIC
 )
 target_include_directories(allostery_lib PUBLIC src)
 target_link_libraries(allostery_lib PRIVATE snmalloc_lib)
-if(GNULIKE)
-    target_compile_options(allostery_lib PRIVATE -fno-builtin-memcpy)
-endif()
 add_library(allostery SHARED
     src/allostery.cpp
     src/allostery.h
