@@ -206,7 +206,7 @@ int map_set_numeric(VSMap* map, const char* key,
                 map->get_mut()->set(ref, marr.get(), nullptr);
             }
             auto index = marr->bytes_count() / 8;
-            marr->realloc(marr->bytes_count() * 8 + 8);
+            marr->realloc(index * 8 + 8);
             static_cast<decltype(value)*>(marr->data())[index] = value;
             return 0;
         }

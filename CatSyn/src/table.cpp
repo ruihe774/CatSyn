@@ -71,7 +71,7 @@ size_t Table::prev(size_t ref) const noexcept {
 Table::Table(const Table& other) noexcept {
     const char* key;
     vec.reserve(other.vec.size());
-    for (auto ref = other.next(npos); ref != npos; ref = next(ref))
+    for (auto ref = other.next(npos); ref != npos; ref = other.next(ref))
         vec.emplace_back(key, other.get(ref, &key));
 }
 

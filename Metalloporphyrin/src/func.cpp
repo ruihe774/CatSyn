@@ -70,8 +70,9 @@ void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore*, const VSAPI
     } else {
         auto table = result.query<const catsyn::ITable>();
         for (size_t ref = table->next(catsyn::ITable::npos); ref != catsyn::ITable::npos; ref = table->next(ref)) {
-            const char* key;
-            out->get_mut()->set(catsyn::ITable::npos, table->get(ref, &key), key);
+            const char* key = nullptr;
+            auto val = table->get(ref, &key);
+            out->get_mut()->set(catsyn::ITable::npos, val, key);
         }
     }
 }

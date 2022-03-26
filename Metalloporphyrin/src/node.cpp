@@ -171,8 +171,9 @@ void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit in
 }
 
 VSFilter::~VSFilter() {
-    if (freer)
-        freer(instanceData, core.get(), &api);
+    // XXX
+//    if (freer)
+//        freer(instanceData, core.get(), &api);
 }
 
 catsyn::FilterFlags VSFilter::get_filter_flags() const noexcept {

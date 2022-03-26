@@ -25,6 +25,7 @@ class Bytes : public Object, virtual public IBytes {
 
     void realloc(size_t new_size) noexcept final {
         this->buf = re_alloc(this->buf, new_size);
+        this->len = new_size;
     }
 
     void* data() noexcept final {
