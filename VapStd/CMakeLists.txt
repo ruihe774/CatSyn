@@ -51,13 +51,13 @@ add_library(vapstd SHARED
 target_link_libraries(vapstd PRIVATE zimg)
 target_compile_definitions(vapstd PRIVATE VS_CORE_EXPORTS VS_TARGET_OS_WINDOWS VS_TARGET_CPU_X86 _CRT_SECURE_NO_WARNINGS)
 
-add_library(vsstd SHARED VSStd.cpp internalfilters.h)
-target_link_libraries(vsstd PRIVATE vapstd)
+add_library(vapstd-core SHARED vapstd-core.cpp internalfilters.h)
+target_link_libraries(vapstd-core PRIVATE vapstd)
 
-add_library(vsresize SHARED VSRez.cpp internalfilters.h)
-target_link_libraries(vsresize PRIVATE vapstd)
+add_library(vapstd-resize SHARED vapstd-resize.cpp internalfilters.h)
+target_link_libraries(vapstd-resize PRIVATE vapstd)
 
-add_library(vstext SHARED VSText.cpp internalfilters.h)
-target_link_libraries(vstext PRIVATE vapstd)
+add_library(vapstd-text SHARED vapstd-text.cpp internalfilters.h)
+target_link_libraries(vapstd-text PRIVATE vapstd)
 
-install(TARGETS vapstd vsstd vsresize vstext)
+install(TARGETS vapstd vapstd-core vapstd-resize vapstd-text)

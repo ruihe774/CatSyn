@@ -47,10 +47,11 @@ target_link_libraries(catsyn PRIVATE Boost::container)
 
 configure_file(src/catcfg.h.in catcfg.h)
 
-install(TARGETS catsyn)
+install(TARGETS catsyn allostery)
 install(FILES
     include/catsyn.h
     include/cathelper.h
     TYPE INCLUDE
 )
 install_pdb(catsyn)
+install_pdb(allostery)
