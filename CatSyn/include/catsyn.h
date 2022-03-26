@@ -95,23 +95,10 @@ class ITable : virtual public IObject {
 };
 
 class IBytes : virtual public IObject {
-  protected:
-    void* buf{nullptr};
-    size_t len{0};
-
   public:
-    void* data() noexcept {
-        return buf;
-    }
-
-    const void* data() const noexcept {
-        return buf;
-    }
-
-    size_t size() const noexcept {
-        return len;
-    }
-
+    virtual void* data() noexcept = 0;
+    virtual const void* data() const noexcept = 0;
+    virtual size_t size() const noexcept = 0;
     virtual void realloc(size_t new_size) noexcept = 0;
 };
 
@@ -121,16 +108,14 @@ enum class SampleType {
 };
 
 class IArray : virtual public IBytes {
-    size_t size() const noexcept {
-        return IBytes::size();
-    }
+    using IBytes::size;
 
   public:
-    const std::type_info* element_type;
-
     size_t bytes_count() const noexcept {
         return size();
     }
+
+    virtual const std::type_info& get_element_type() const noexcept = 0;
 };
 
 enum class ColorFamily {
@@ -204,7 +189,7 @@ class IEnzyme : virtual public IRef {
 class IFactory : virtual public IRef {
   public:
     virtual void create_bytes(const void* data, size_t len, IBytes** out) noexcept = 0;
-    virtual void create_array(const std::type_info* type, const void* data, size_t bytes_count,
+    virtual void create_array(const std::type_info& type, const void* data, size_t bytes_count,
                               IArray** out) noexcept = 0;
     virtual void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                               IFrame** out) noexcept = 0;
@@ -216,7 +201,7 @@ class IFactory : virtual public IRef {
 
 struct ArgSpec {
     const char* name;
-    const std::type_info* type;
+    const std::type_info& type;
     bool array;
     bool required;
 };
@@ -225,7 +210,7 @@ class IFunction : virtual public IRef {
   public:
     virtual void invoke(ITable* args, const IObject** out) = 0;
     virtual const ArgSpec* get_arg_specs(size_t* len) const noexcept = 0;
-    virtual const std::type_info* get_out_type() const noexcept = 0;
+    virtual const std::type_info& get_out_type() const noexcept = 0;
 };
 
 class INucleus;

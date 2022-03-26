@@ -154,7 +154,7 @@ class Nucleus final : public Object, public INucleus, public IFactory {
     ITable* get_ribosomes() noexcept final;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
-    void create_array(const std::type_info* type, const void* data, size_t bytes_count, IArray** out) noexcept final;
+    void create_array(const std::type_info& type, const void* data, size_t bytes_count, IArray** out) noexcept final;
 
     void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                       IFrame** out) noexcept final;

@@ -5,7 +5,7 @@ void* re_alloc(void* ptr, size_t new_size) noexcept;
 #ifdef ALLOSTERY_IMPL
 #define ALLOSTERY_API __declspec(dllexport) extern "C"
 #else
-#define ALLOSTERY_API __declspec(dllimport) extern "C"
+#define ALLOSTERY_API extern "C"
 #endif
 
 ALLOSTERY_API void* alloc(size_t size);

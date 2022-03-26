@@ -5,6 +5,8 @@
 #include <allostery.h>
 
 class Bytes : public Object, virtual public IBytes {
+    void* buf;
+    size_t len;
   public:
     Bytes(const void* data, size_t len) noexcept {
         this->buf = operator new(len);
@@ -24,12 +26,27 @@ class Bytes : public Object, virtual public IBytes {
     void realloc(size_t new_size) noexcept final {
         this->buf = re_alloc(this->buf, new_size);
     }
+
+    void* data() noexcept final {
+        return buf;
+    }
+
+    const void* data() const noexcept final {
+        return buf;
+    }
+
+    size_t size() const noexcept final {
+        return len;
+    }
 };
 
 class Array : public Bytes, public IArray {
+    const std::type_info& type;
   public:
-    Array(const std::type_info* type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count) {
-        this->element_type = type;
+    Array(const std::type_info& type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count), type(type) {}
+
+    const std::type_info& get_element_type() const noexcept final {
+        return type;
     }
 };
 
@@ -37,7 +54,7 @@ void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept 
     create_instance<Bytes>(out, data, len);
 }
 
-void Nucleus::create_array(const std::type_info* type, const void* data, size_t bytes_count, IArray** out) noexcept {
+void Nucleus::create_array(const std::type_info& type, const void* data, size_t bytes_count, IArray** out) noexcept {
     create_instance<Array>(out, type, data, bytes_count);
 }
 
