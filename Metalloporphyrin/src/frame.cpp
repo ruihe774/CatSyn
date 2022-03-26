@@ -14,26 +14,15 @@ catsyn::cat_ptr<catsyn::IFrame>& VSFrameRef::get_mut() noexcept {
 
 static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW,
                                        int subSamplingH) {
-    catsyn::FrameFormat ff;
     if (colorFamily > cmYUV)
         throw std::logic_error("unimplemented color family");
-    ff.detail.color_family = static_cast<catsyn::ColorFamily>(colorFamily / 1000000);
-    ff.detail.sample_type = static_cast<catsyn::SampleType>(sampleType);
-    ff.detail.bits_per_sample = bitsPerSample;
-    ff.detail.width_subsampling = subSamplingW;
-    ff.detail.height_subsampling = subSamplingH;
-    return ff;
+    return catsyn::make_frame_format(static_cast<catsyn::ColorFamily>(colorFamily / 1000000),
+                                     static_cast<catsyn::SampleType>(sampleType), bitsPerSample, subSamplingW,
+                                     subSamplingH);
 }
 
 catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf) {
-    std::shared_lock<std::shared_mutex> lock(formats_mutex);
-    for (auto& item : formats)
-        if (item.second.get() == vsf) {
-            catsyn::FrameFormat ff;
-            ff.id = item.first;
-            return ff;
-        }
-    throw std::logic_error("format not registered");
+    return ff_vs_to_cs(vsf->colorFamily, vsf->sampleType, vsf->bitsPerSample, vsf->subSamplingW, vsf->subSamplingH);
 }
 
 const VSFormat* registerFormat(catsyn::FrameFormat ff, const char* name, int id) noexcept {
@@ -111,7 +100,11 @@ static void registerFormats() noexcept {
 }
 
 const VSFormat* getFormatPreset(int id, VSCore*) noexcept {
-    return vsformatid_map[id];
+    std::shared_lock<std::shared_mutex> lock(formats_mutex);
+    if (auto it = vsformatid_map.find(id); it != vsformatid_map.end())
+        return it->second;
+    else
+        return nullptr;
 }
 
 static struct FormatRegisterer {
@@ -120,11 +113,9 @@ static struct FormatRegisterer {
     }
 } fmtreg [[maybe_unused]];
 
-VSFrameRef* newVideoFrame(const VSFormat* format, int width, int height, const VSFrameRef* propSrc,
-                          VSCore* core) noexcept {
+VSFrameRef* newVideoFrame(const VSFormat* format, int width, int height, const VSFrameRef* propSrc, VSCore*) noexcept {
     catsyn::FrameInfo fi{
-        ff_vs_to_cs(format->colorFamily, format->sampleType, format->bitsPerSample, format->subSamplingW,
-                    format->subSamplingH),
+        ff_vs_to_cs(format),
         static_cast<unsigned>(width),
         static_cast<unsigned>(height),
     };
@@ -135,17 +126,16 @@ VSFrameRef* newVideoFrame(const VSFormat* format, int width, int height, const V
 }
 
 VSFrameRef* newVideoFrame2(const VSFormat* format, int width, int height, const VSFrameRef** planeSrc,
-                           const int* planes, const VSFrameRef* propSrc, VSCore* core) noexcept {
+                           const int* planes, const VSFrameRef* propSrc, VSCore*) noexcept {
     if (!planeSrc || !planes)
-        return newVideoFrame(format, width, height, propSrc, core);
+        return newVideoFrame(format, width, height, propSrc, core.get());
     catsyn::FrameInfo fi{
-        ff_vs_to_cs(format->colorFamily, format->sampleType, format->bitsPerSample, format->subSamplingW,
-                    format->subSamplingH),
+        ff_vs_to_cs(format),
         static_cast<unsigned>(width),
         static_cast<unsigned>(height),
     };
     auto frame_ref = new VSFrameRef;
-    std::array<const catsyn::IAlignedBytes*, 3> agb;
+    std::array<const catsyn::IBytes*, 3> agb;
     std::array<size_t, 3> strides;
     for (unsigned i = 0; i < catsyn::num_planes(fi.format); ++i)
         if (planeSrc[i]) {
@@ -197,7 +187,7 @@ int getFrameHeight(const VSFrameRef* f, int plane) noexcept {
 
 void copyFrameProps(const VSFrameRef* src, VSFrameRef* dst, VSCore*) noexcept {
     catsyn::cat_ptr<const catsyn::ITable> props = src->frame->get_frame_props();
-    dst->get_mut()->set_frame_props(props.clone().get());
+    dst->get_mut()->set_frame_props(props.get());
 }
 
 const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept {

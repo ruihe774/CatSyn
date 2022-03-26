@@ -100,7 +100,9 @@ size_t round_size(size_t size) noexcept {
 }
 
 void round_copy(void* __restrict dst, const void* __restrict src, size_t size) noexcept {
-    if (size < 32)
+    if (reinterpret_cast<uintptr_t>(dst) % 32 || reinterpret_cast<uintptr_t>(src) % 32) [[unlikely]]
+        memcpy(dst, src, size);
+    else if (size < 32)
         for (size_t i = 0; i < size; ++i)
             static_cast<char*>(dst)[i] = static_cast<const char*>(src)[i];
     else if (size <= 256 * 1024)

@@ -122,6 +122,10 @@ template<typename T> class cat_ptr {
         return &m_ptr;
     }
 
+    IObject** put_object() noexcept {
+        return reinterpret_cast<IObject**>(put());
+    }
+
     pointer* addressof() noexcept {
         return &m_ptr;
     }
@@ -194,6 +198,12 @@ inline FrameFormat make_frame_format(ColorFamily color_family, SampleType sample
     ff.detail.bits_per_sample = bits_per_sample;
     ff.detail.width_subsampling = width_subsampling;
     ff.detail.height_subsampling = height_subsampling;
+    return ff;
+}
+
+inline FrameFormat get_frame_format_by_id(uint32_t id) noexcept {
+    FrameFormat ff;
+    ff.id = id;
     return ff;
 }
 

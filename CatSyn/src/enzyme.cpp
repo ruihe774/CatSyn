@@ -153,7 +153,7 @@ void Nucleus::synthesize_enzymes() noexcept {
     auto old_refcount = this->acquire_refcount();
 
     std::vector<std::string_view> tokens;
-    for (size_t ref = finders->begin(), ed = finders->end(); ref != ed; ref = finders->next(ref)) {
+    for (size_t ref = finders->next(ITable::npos); ref != ITable::npos; ref = finders->next(ref)) {
         auto finder = &const_cast<IEnzymeFinder&>(dynamic_cast<const IEnzymeFinder&>(*finders->get(ref, nullptr)));
         size_t size;
         auto p = finder->find(&size);
@@ -166,7 +166,7 @@ void Nucleus::synthesize_enzymes() noexcept {
     for (auto token_sv : tokens) {
         // we are sure that tokens are null terminated!
         auto token = token_sv.data();
-        for (size_t ref = ribosomes->begin(), ed = ribosomes->end(); ref != ed; ref = ribosomes->next(ref)) {
+        for (size_t ref = ribosomes->next(ITable::npos); ref != ITable::npos; ref = ribosomes->next(ref)) {
             auto ribosome = &const_cast<IRibosome&>(dynamic_cast<const IRibosome&>(*ribosomes->get(ref, nullptr)));
             cat_ptr<IObject> obj;
             ribosome->synthesize_enzyme(token, obj.put());
@@ -182,7 +182,7 @@ void Nucleus::synthesize_enzymes() noexcept {
                 } else if (auto ribosome = obj.try_query<IRibosome>(); ribosome) {
                     auto id = ribosome->get_identifier();
                     auto ref = ribosomes->find(id);
-                    if (ref != ribosomes->end())
+                    if (ref != ITable::npos)
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: ribosome '{}' is registered multiple times", id));
                     ribosomes->set(ref, ribosome.get(), id);
@@ -196,7 +196,7 @@ void Nucleus::synthesize_enzymes() noexcept {
     }
     for (const auto& entry : ezs)
         // we are sure that keys are null terminated!
-        enzymes->set(enzymes->end(), entry.second.get(), entry.first.data());
+        enzymes->set(ITable::npos, entry.second.get(), entry.first.data());
 
     auto new_refcount = this->acquire_refcount();
     if (old_refcount != new_refcount)

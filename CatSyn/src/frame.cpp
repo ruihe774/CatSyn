@@ -40,13 +40,10 @@ class Bytes : public Object, virtual public IBytes {
     }
 };
 
-class Array : public Bytes, virtual public IArray {
-    const std::type_info& type;
+class Numeric : public Bytes, virtual public INumeric {
   public:
-    Array(const std::type_info& type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count), type(type) {}
-
-    const std::type_info& get_element_type() const noexcept final {
-        return type;
+    Numeric(SampleType sample_type, const void* data, size_t bytes_count) noexcept : Bytes(data, bytes_count) {
+        this->sample_type = sample_type;
     }
 };
 
@@ -54,8 +51,8 @@ void Nucleus::create_bytes(const void* data, size_t len, IBytes** out) noexcept 
     create_instance<Bytes>(out, data, len);
 }
 
-void Nucleus::create_array(const std::type_info& type, const void* data, size_t bytes_count, IArray** out) noexcept {
-    create_instance<Array>(out, type, data, bytes_count);
+void Nucleus::create_numeric(SampleType sample_type, const void* data, size_t bytes_count, INumeric** out) noexcept {
+    create_instance<Numeric>(out, sample_type, data, bytes_count);
 }
 
 class Frame final : public Object, virtual public IFrame, public Shuttle {

@@ -12,7 +12,7 @@ Nucleus::Nucleus() {
 
     cat_ptr<IRibosome> csv1;
     create_catsyn_v1_ribosome(csv1.put());
-    ribosomes->set(ribosomes->end(), csv1.get(), csv1->get_identifier());
+    ribosomes->set(ITable::npos, csv1.get(), csv1->get_identifier());
 
     create_table(0, t.put());
     enzymes = t.query<Table>();
@@ -41,7 +41,11 @@ ITable* Nucleus::get_enzymes() noexcept {
 void Nucleus::set_config(NucleusConfig) noexcept {}
 
 NucleusConfig Nucleus::get_config() const noexcept {
-    return {};
+    // stub
+    return {
+        std::thread::hardware_concurrency(),
+        4096,
+    };
 }
 
 CAT_API Version catsyn::get_version() noexcept {

@@ -1,14 +1,12 @@
 #include <mutex>
 #include <variant>
 
-#include <string.h>
-
 #include <boost/container/flat_map.hpp>
 
 #include <porphyrin.h>
 
 VSNodeRef* cloneNodeRef(VSNodeRef* node) noexcept {
-    return new VSNodeRef{node->nucl, node->substrate, node->output, node->vi};
+    return new VSNodeRef{node->substrate, node->output, node->vi};
 }
 
 void freeNode(VSNodeRef* node) noexcept {
@@ -18,33 +16,41 @@ void freeNode(VSNodeRef* node) noexcept {
 static std::mutex starting_mutex;
 
 void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* userData) noexcept {
-    if (!node->nucl.is_reacting()) {
+    if (!core->nucl->is_reacting()) {
         std::lock_guard<std::mutex> guard(starting_mutex);
-        node->nucl.react();
+        core->nucl->react();
     }
     if (!node->output)
-        node->nucl.create_output(node->substrate.get(), node->output.put());
+        core->nucl->create_output(node->substrate.get(), node->output.put());
     node->output->get_frame(n, [=](const catsyn::IFrame* frame, std::exception_ptr exc) {
         if (exc)
-            callback(userData, nullptr, n, node, catsyn::exception_ptr_what(exc));
+            try {
+                std::rethrow_exception(exc);
+            } catch (std::exception& exc) {
+                callback(userData, nullptr, n, node, exc.what());
+            }
         else
             callback(userData, new VSFrameRef{frame}, n, node, nullptr);
     });
 }
 
 const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) noexcept {
-    if (!node->nucl.is_reacting()) {
+    if (!core->nucl->is_reacting()) {
         std::lock_guard<std::mutex> guard(starting_mutex);
-        node->nucl.react();
+        core->nucl->react();
     }
     if (!node->output)
-        node->nucl.create_output(node->substrate.get(), node->output.put());
+        core->nucl->create_output(node->substrate.get(), node->output.put());
     std::condition_variable cv;
     std::mutex m;
     const VSFrameRef* frame_ref = nullptr;
     node->output->get_frame(n, [&](const catsyn::IFrame* frame, std::exception_ptr exc) {
         if (exc)
-            strcpy_s(errorMsg, bufSize, catsyn::exception_ptr_what(exc));
+            try {
+                std::rethrow_exception(exc);
+            } catch (std::exception& exc) {
+                strcpy_s(errorMsg, bufSize, exc.what());
+            }
         else
             frame_ref = new VSFrameRef{frame};
         std::lock_guard<std::mutex> guard(m);
@@ -105,25 +111,26 @@ void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept 
     auto nd = reinterpret_cast<VSNodeRef*>(node);
     nd->vi = *vi;
     if (numOutputs != 1)
-        nd->nucl.get_logger()->log(catsyn::LogLevel::WARNING,
-                                   "Metalloporphyrin: returning multiple clips are not supported (setVideoInfo)");
+        core->nucl->get_logger()->log(catsyn::LogLevel::WARNING,
+                                      "Metalloporphyrin: returning multiple clips are not supported (setVideoInfo)");
 }
 
 struct VSFilter final : Object, catsyn::IFilter {
-    VSCore* core;
     catsyn::VideoInfo vi;
     catsyn::FilterFlags flags;
     VSFilterGetFrame getFrame;
-    std::shared_ptr<void*> instanceData;
-    std::shared_ptr<bool> is_source_filter;
+    VSFilterFree freer;
+    mutable void* instanceData;
+    mutable bool is_source_filter;
 
-    void clone(catsyn::IObject** out) const noexcept final;
+    ~VSFilter() final;
 
     catsyn::FilterFlags get_filter_flags() const noexcept final;
     catsyn::VideoInfo get_video_info() const noexcept final;
-    void get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) noexcept final;
-    void process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData* frame_data_move_in,
-                       const catsyn::IFrame** out) final;
+    void get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) const noexcept final;
+    void process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData** frame_data,
+                       const catsyn::IFrame** out) const final;
+    void drop_frame_data(catsyn::FrameData* frame_data) const noexcept final;
 };
 
 static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
@@ -146,37 +153,26 @@ static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
 }
 
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
-                  VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore* core) noexcept {
+                  VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore*) noexcept {
     if (filterMode >= fmSerial)
         fm_not_support();
     if (flags > nfMakeLinear || flags & nfIsCache)
         nf_not_support();
-    std::unique_ptr<VSNodeRef> node(new VSNodeRef{*core->nucl});
-    init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core, &api);
+    std::unique_ptr<VSNodeRef> node(new VSNodeRef);
+    init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core.get(), &api);
     auto filter = new VSFilter;
-    filter->core = core;
     filter->vi = vi_vs_to_cs(node->vi);
     filter->flags = catsyn::FilterFlags((flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
                                         (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded));
     filter->getFrame = getFrame;
-    filter->instanceData = std::shared_ptr<void*>{new void*(instanceData), [freer, core](void** data) {
-                                                      freer(*data, core, &api);
-                                                      delete data;
-                                                  }};
-    filter->is_source_filter = std::make_shared<bool>(false);
-    out->get_mut().set("clip", filter);
+    filter->instanceData = instanceData;
+    filter->is_source_filter = false;
+    out->get_mut()->set(out->table->find("clip"), filter, "clip");
 }
 
-void VSFilter::clone(catsyn::IObject** out) const noexcept {
-    auto f = new VSFilter;
-    f->core = core;
-    f->vi = vi;
-    f->flags = flags;
-    f->getFrame = getFrame;
-    f->instanceData = instanceData;
-    f->is_source_filter = is_source_filter;
-    f->add_ref();
-    *out = f;
+VSFilter::~VSFilter() {
+    if (freer)
+        freer(instanceData, core.get(), &api);
 }
 
 catsyn::FilterFlags VSFilter::get_filter_flags() const noexcept {
@@ -191,14 +187,14 @@ catsyn::VideoInfo VSFilter::get_video_info() const noexcept {
     throw std::runtime_error(msg);
 }
 
-void VSFilter::get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) noexcept {
+void VSFilter::get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) const noexcept {
     auto ctx = std::make_unique<VSFrameContext>(frame_idx);
-    if (*is_source_filter)
+    if (is_source_filter)
         ctx->dependency_count = 0;
     else {
         auto& frames = ctx->frames.emplace<VSFrameContext::request_container>();
-        *is_source_filter = !!getFrame(static_cast<int>(frame_idx), arInitial, reinterpret_cast<void**&>(instanceData),
-                                       &ctx->vs_frame_data, ctx.get(), core, &api);
+        is_source_filter = !!getFrame(static_cast<int>(frame_idx), arInitial, &instanceData, &ctx->vs_frame_data,
+                                      ctx.get(), core.get(), &api);
         if (auto err = ctx->error; err)
             throw_filter_error(err);
         ctx->dependencies = frames.data();
@@ -207,19 +203,25 @@ void VSFilter::get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) 
     *frame_data = ctx.release();
 }
 
-void VSFilter::process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData* frame_data_move_in,
-                             const catsyn::IFrame** out) {
-    auto ctx = std::unique_ptr<VSFrameContext>(static_cast<VSFrameContext*>(frame_data_move_in));
+void VSFilter::process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData** frame_data,
+                             const catsyn::IFrame** out) const {
+    auto ctx = std::unique_ptr<VSFrameContext>(static_cast<VSFrameContext*>(*frame_data));
+    *frame_data = nullptr;
     VSFrameContext::input_map inputs;
     for (size_t i = 0; i < ctx->dependency_count; ++i)
         inputs.emplace(ctx->dependencies[i], input_frames[i]);
     ctx->frames = std::move(inputs);
     auto frame_ref = std::unique_ptr<VSFrameRef>(const_cast<VSFrameRef*>(
-        getFrame(static_cast<int>(ctx->frame_idx), *is_source_filter ? arInitial : arAllFramesReady,
-                 reinterpret_cast<void**&>(instanceData), &ctx->vs_frame_data, ctx.get(), core, &api)));
+        getFrame(static_cast<int>(ctx->frame_idx), is_source_filter ? arInitial : arAllFramesReady, &instanceData,
+                 &ctx->vs_frame_data, ctx.get(), core.get(), &api)));
     if (auto err = ctx->error; err)
         throw_filter_error(err);
     *out = frame_ref->frame.detach();
+}
+
+void VSFilter::drop_frame_data(catsyn::FrameData* frame_data) const noexcept {
+    if (frame_data)
+        core->nucl->get_logger()->log(catsyn::LogLevel::WARNING, "VSFilter: frame data leaked");
 }
 
 [[noreturn]] static void not_implemented() {
@@ -231,7 +233,7 @@ void queryCompletedFrame(VSNodeRef** node, int* n, VSFrameContext* frameCtx) noe
 }
 
 void releaseFrameEarly(VSNodeRef* node, int n, VSFrameContext* frameCtx) noexcept {
-    node->nucl.get_logger()->log(catsyn::LogLevel::WARNING, "Metalloporphyrin: not implemented (releaseFrameEarly)");
+    core->nucl->get_logger()->log(catsyn::LogLevel::WARNING, "Metalloporphyrin: not implemented (releaseFrameEarly)");
 }
 
 int getOutputIndex(VSFrameContext* frameCtx) noexcept {

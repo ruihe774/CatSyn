@@ -27,15 +27,12 @@ bool FrameInstanceTickGreater::operator()(const FrameInstance* l, const FrameIns
     return l->tick > r->tick;
 }
 
-Substrate::Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept : Shuttle(nucl) {
+Substrate::Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept {
     this->filter = filter.usurp_or_clone();
 }
 
 VideoInfo Substrate::get_video_info() const noexcept {
     return filter->get_video_info();
-}
-INucleus* Substrate::get_nucleus() noexcept {
-    return &this->nucl;
 }
 
 void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {

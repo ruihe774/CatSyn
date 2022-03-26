@@ -1,8 +1,6 @@
-#include <stdio.h>
-
 #include <porphyrin.h>
 
-VSAPI api {
+VSAPI api{
     createCore,
     freeCore,
     getCoreInfo,
@@ -83,9 +81,5 @@ VSAPI api {
 };
 
 VS_API(const VSAPI*) getVapourSynthAPI(int version) noexcept {
-    if (version != VAPOURSYNTH_API_VERSION) {
-        fprintf(stderr, "VapourSynth API version mismatch");
-        abort();
-    }
-    return &api;
+    return version == VAPOURSYNTH_API_VERSION ? &api : nullptr;
 }

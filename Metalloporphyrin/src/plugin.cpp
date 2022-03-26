@@ -3,14 +3,14 @@
 
 #include <string.h>
 
-#include <boost/algorithm/string/predicate.hpp>
-
 #include <Windows.h>
 
 #include <porphyrin.h>
 
+constexpr auto npos = catsyn::ITable::npos;
+
 struct VSEnzyme final : public Object, public catsyn::IEnzyme {
-    catsyn::TableView<catsyn::ITable> funcs;
+    catsyn::cat_ptr<catsyn::ITable> funcs;
     std::string path;
     std::string identifier;
     std::string ns;
@@ -21,86 +21,21 @@ struct VSEnzyme final : public Object, public catsyn::IEnzyme {
         return ns.c_str();
     }
     const catsyn::ITable* get_functions() const noexcept final {
-        return funcs.table.get();
+        return funcs.get();
     }
 
-    VSEnzyme(catsyn::INucleus& nucl, const char* path) noexcept : path(path), funcs(nullptr) {
-        nucl.get_factory()->create_table(0, funcs.table.put());
+    explicit VSEnzyme(const char* path) noexcept : path(path), funcs(nullptr) {
+        core->nucl->get_factory()->create_table(0, funcs.put());
 #ifdef _WIN32
         std::replace(this->path.begin(), this->path.end(), '\\', '/');
 #endif
     }
 };
 
-//static std::vector<catsyn::ArgSpec> args_vs_to_cs(VSPlugin* plugin, const char* args) {
-//    std::vector<catsyn::ArgSpec> specs;
-//    auto len = strlen(args);
-//    memcpy_s(plugin->pargs, sizeof(VSPlugin::args_buf) - (plugin->pargs - plugin->args_buf), args, len + 1);
-//    auto p = plugin->pargs;
-//    plugin->pargs += len + 1;
-//    auto s = p;
-//    int phase = 0;
-//    const char* name;
-//    const std::type_info* ti;
-//    bool required;
-//    for (;; ++p) {
-//        auto ch = *p;
-//        switch (ch) {
-//        case ':':
-//        case ';':
-//        case '[':
-//        case '\0':
-//            *p = '\0';
-//            switch (phase) {
-//            case 0:
-//                name = s;
-//                required = true;
-//                break;
-//            case 1:
-//                if (strcmp(s, "int") == 0 || strcmp(s, "float") == 0)
-//                    ti = &typeid(catsyn::INumberArray);
-//                else if (strcmp(s, "data") == 0)
-//                    ti = &typeid(catsyn::IBytes);
-//                else if (strcmp(s, "clip") == 0)
-//                    ti = &typeid(catsyn::ISubstrate);
-//                else if (strcmp(s, "frame") == 0)
-//                    ti = &typeid(catsyn::IFrame);
-//                else if (strcmp(s, "func") == 0)
-//                    ti = &typeid(catsyn::IFunction);
-//                else
-//                    throw std::invalid_argument("unknown argument type");
-//                break;
-//            case 2:
-//                if (strcmp(s, "opt") == 0)
-//                    required = false;
-//                break;
-//            }
-//            if (ch == '[') {
-//                p += 2;
-//                if (*p == ':')
-//                    phase = 2;
-//                else {
-//                    specs.push_back(catsyn::ArgSpec{name, *ti, required});
-//                    phase = 0;
-//                }
-//            } else if (ch == ':')
-//                ++phase;
-//            else if (phase) {
-//                specs.push_back(catsyn::ArgSpec{name, *ti, required});
-//                phase = 0;
-//            }
-//            s = p + 1;
-//        }
-//        if (ch == '\0')
-//            break;
-//    }
-//    return specs;
-//}
-
 void registerFunction(const char* name, const char* args, VSPublicFunction argsFunc, void* functionData,
                       VSPlugin* plugin) noexcept {
     auto vse = plugin->enzyme.query<VSEnzyme>();
-    vse->funcs.set(name, new VSFunc{plugin->core, argsFunc, functionData, nullptr, std::nullopt});
+    vse->funcs->set(vse->funcs->find(name), new VSFunc{argsFunc, functionData, nullptr, std::nullopt}, name);
     plugin->arg_strs[name] = args;
 }
 
@@ -111,51 +46,55 @@ static void configurePlugin(const char* identifier, const char* defaultNamespace
     vse->ns = defaultNamespace;
 }
 
-VSPlugin* getPluginById(const char* identifier, VSCore* core) noexcept {
+VSPlugin* getPluginById(const char* identifier, VSCore*) noexcept {
     {
         std::shared_lock<std::shared_mutex> lock(core->plugins_mutex);
-        for (auto& plugin : core->plugins)
-            if (strcmp(plugin->enzyme->get_identifier(), identifier) == 0)
-                return plugin.get();
+        if (auto it = core->plugins.find(identifier); it != core->plugins.end())
+            return it->second.get();
     }
-    auto enzyme = catsyn::get_enzyme_by_id(core->nucl.get(), identifier);
-    if (enzyme) {
+    auto enzymes = core->nucl->get_enzymes();
+    if (auto enzyme = const_cast<catsyn::IEnzyme*>(
+            dynamic_cast<const catsyn::IEnzyme*>(enzymes->get(enzymes->find(identifier), nullptr)));
+        enzyme) {
         std::unique_lock<std::shared_mutex> lock(core->plugins_mutex);
-        core->plugins.emplace_back(new VSPlugin{core, enzyme});
-        return core->plugins.back().get();
+        auto plugin = core->plugins.emplace(identifier, new VSPlugin{enzyme}).first->second.get();
+        core->ns_map.emplace(enzyme->get_namespace(), plugin);
+        return plugin;
     } else
         return nullptr;
 }
 
-VSPlugin* getPluginByNs(const char* ns, VSCore* core) noexcept {
+VSPlugin* getPluginByNs(const char* ns, VSCore*) noexcept {
     {
         std::shared_lock<std::shared_mutex> lock(core->plugins_mutex);
-        for (auto& plugin : core->plugins)
-            if (strcmp(plugin->enzyme->get_namespace(), ns) == 0)
-                return plugin.get();
+        if (auto it = core->ns_map.find(ns); it != core->ns_map.end())
+            return it->second;
     }
-    auto enzyme = catsyn::get_enzyme_by_ns(core->nucl.get(), ns);
-    if (enzyme) {
-        std::unique_lock<std::shared_mutex> lock(core->plugins_mutex);
-        core->plugins.emplace_back(new VSPlugin{core, enzyme});
-        return core->plugins.back().get();
-    } else
-        return nullptr;
+    auto enzymes = core->nucl->get_enzymes();
+    for (auto ref = enzymes->next(npos); ref != npos; ref = enzymes->next(ref)) {
+        auto enzyme = const_cast<catsyn::IEnzyme*>(dynamic_cast<const catsyn::IEnzyme*>(enzymes->get(ref, nullptr)));
+        if (strcmp(enzyme->get_namespace(), ns) == 0) {
+            std::unique_lock<std::shared_mutex> lock(core->plugins_mutex);
+            auto plugin = core->plugins.emplace(enzyme->get_identifier(), new VSPlugin{enzyme}).first->second.get();
+            core->ns_map.emplace(ns, plugin);
+            return plugin;
+        }
+    }
+    return nullptr;
 }
 
-VSMap* getPlugins(VSCore* core) noexcept {
+VSMap* getPlugins(VSCore*) noexcept {
     catsyn::cat_ptr<catsyn::ITable> table;
     auto plugins = core->nucl->get_enzymes();
     auto size = plugins->size();
     auto factory = core->nucl->get_factory();
     factory->create_table(size, table.put());
-    for (size_t old_ref = 0, new_ref = 0; old_ref < size; ++old_ref)
-        if (auto enzyme = &dynamic_cast<const catsyn::IEnzyme&>(*plugins->get(old_ref)); enzyme) {
+    for (size_t ref = plugins->next(npos); ref != npos; ref = plugins->next(ref))
+        if (auto enzyme = &dynamic_cast<const catsyn::IEnzyme&>(*plugins->get(ref, nullptr)); enzyme) {
             auto identifier = enzyme->get_identifier();
             auto ns = enzyme->get_namespace();
             auto id_len = strlen(identifier);
             auto ns_len = strlen(ns);
-            table->set_key(new_ref, identifier);
             catsyn::cat_ptr<catsyn::IBytes> bytes;
             factory->create_bytes(nullptr, id_len + ns_len + 3, bytes.put());
             auto pb = static_cast<char*>(bytes->data());
@@ -164,7 +103,7 @@ VSMap* getPlugins(VSCore* core) noexcept {
             memcpy(pb + ns_len + 1, identifier, id_len);
             pb[ns_len + id_len + 1] = ';';
             pb[ns_len + id_len + 2] = '\0';
-            table->set(new_ref++, bytes.get());
+            table->set(npos, bytes.get(), identifier);
         }
     return new VSMap{std::move(table)};
 }
@@ -172,23 +111,22 @@ VSMap* getPlugins(VSCore* core) noexcept {
 VSMap* getFunctions(VSPlugin* plugin) noexcept {
     // TODO: support non-VS filters
     catsyn::cat_ptr<catsyn::ITable> table;
-    auto factory = plugin->core->nucl->get_factory();
+    auto factory = core->nucl->get_factory();
     auto functions = plugin->enzyme->get_functions();
     auto size = functions->size();
     factory->create_table(size, table.put());
-    for (size_t old_ref = 0, new_ref = 0; old_ref < size; ++old_ref)
-        if (auto key = functions->get_key(old_ref); key) {
+    const char* key;
+    for (size_t ref = functions->next(npos); ref != npos; ref = functions->next(ref))
+        if (functions->get(ref, &key) && key) {
             auto key_len = strlen(key);
-            table->set_key(new_ref, key);
             catsyn::cat_ptr<catsyn::IBytes> bytes;
             const auto& arg_str = plugin->arg_strs[key];
             factory->create_bytes(nullptr, key_len + arg_str.size() + 2, bytes.put());
             auto pb = static_cast<char*>(bytes->data());
             memcpy(pb, key, key_len);
             pb[key_len] = ';';
-            memcpy(pb + key_len + 1, arg_str.data(), arg_str.size());
-            pb[key_len + arg_str.size() + 1] = '\0';
-            table->set(new_ref++, bytes.get());
+            memcpy(pb + key_len + 1, arg_str.c_str(), arg_str.size() + 1);
+            table->set(npos, bytes.get(), key);
         }
     return new VSMap{std::move(table)};
 }
@@ -197,8 +135,8 @@ const char* getPluginPath(const VSPlugin* plugin) noexcept {
     try {
         return plugin->enzyme.query<VSEnzyme>()->path.c_str();
     } catch (std::bad_cast&) {
-        plugin->core->nucl->get_logger()->log(
-            catsyn::LogLevel::WARNING, "Metalloporphyrin: cannot retrieve path for non-VS enzyme (getPluginPath)");
+        core->nucl->get_logger()->log(catsyn::LogLevel::WARNING,
+                                      "Metalloporphyrin: cannot retrieve path for non-VS enzyme (getPluginPath)");
         return nullptr;
     }
 }
@@ -221,25 +159,27 @@ static wchar_t* u2w(const char* s) noexcept {
 
 void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noexcept {
     *out = nullptr;
-    if (boost::starts_with(token, "dll:")) {
-        // try {
-        //  boost::dll::shared_library lib(token + 4);
-        //  auto init_func = lib.get<VSInitPlugin>("VapourSynthPluginInit");
-        // TODO: why boost fails?
-        auto lib = LoadLibraryExW(u2w(token + 4), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
-        if (!lib)
+    if (std::string_view{token}.starts_with("dll:")) {
+        auto lib = LoadLibraryExW(u2w(token + 4), nullptr,
+                                  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
+        if (lib == nullptr) {
+            FreeLibrary(lib);
             return;
+        }
         auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));
-        if (!init_func)
+        if (!init_func) {
+            FreeLibrary(lib);
             return;
-        std::unique_ptr<VSPlugin> vsp(new VSPlugin{core, new VSEnzyme{*core->nucl, token + 4}});
+        }
+        std::unique_ptr<VSPlugin> vsp(new VSPlugin{new VSEnzyme{token + 4}});
         init_func(configurePlugin, registerFunction, vsp.get());
+        // loaded.emplace(vsp->enzyme.get(), std::move(lib));
+        auto ns = vsp->enzyme->get_namespace();
+        auto id = vsp->enzyme->get_identifier();
         *out = vsp->enzyme.get();
         (*out)->add_ref();
-        // loaded.emplace(*out, std::move(lib));
         std::lock_guard<std::shared_mutex> guard(core->plugins_mutex);
-        core->plugins.emplace_back(std::move(vsp));
-        // } catch (boost::dll::fs::system_error&) {}
+        core->ns_map.emplace(ns, core->plugins.emplace(id, std::move(vsp)).first->second.get());
     }
 }
 
@@ -248,14 +188,12 @@ void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noe
 }
 
 void VSRibosome::hydrolyze_enzyme(catsyn::IObject** inout) noexcept {
-    auto it = loaded.find(*inout);
-    if (it != loaded.end()) {
-        if (!(*inout)->is_unique())
-            hydrolyze_non_unique();
-        (*inout)->release();
-        *inout = nullptr;
-        loaded.erase(it);
-    }
+//    auto it = loaded.find(*inout);
+//    if (it != loaded.end()) {
+//        if (!(*inout)->is_unique())
+//            hydrolyze_non_unique();
+//        (*inout)->release();
+//        *inout = nullptr;
+//        loaded.erase(it);
+//    }
 }
-
-VSRibosome::VSRibosome(VSCore* core) noexcept : core(core) {}

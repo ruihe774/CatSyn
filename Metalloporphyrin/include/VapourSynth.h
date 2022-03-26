@@ -185,8 +185,7 @@ typedef void (*VSMessageHandlerFree)(void* userData);
 struct VSAPI {
     VSCore* (*createCore)(int threads) noexcept;
     void (*freeCore)(VSCore* core) noexcept;
-    [[deprecated("getCoreInfo has been deprecated as of api 3.6, use getCoreInfo2 instead")]] const VSCoreInfo* (
-        *getCoreInfo)(VSCore* core) noexcept;
+    const VSCoreInfo* (*getCoreInfo)(VSCore* core) noexcept;
     const VSFrameRef* (*cloneFrameRef)(const VSFrameRef* f) noexcept;
     VSNodeRef* (*cloneNodeRef)(VSNodeRef* node) noexcept;
     VSFuncRef* (*cloneFuncRef)(VSFuncRef* f) noexcept;
@@ -256,8 +255,7 @@ struct VSAPI {
     int (*getOutputIndex)(VSFrameContext* frameCtx) noexcept;
     VSFrameRef* (*newVideoFrame2)(const VSFormat* format, int width, int height, const VSFrameRef** planeSrc,
                                   const int* planes, const VSFrameRef* propSrc, VSCore* core) noexcept;
-    [[deprecated("setMessageHandler has been deprecated as of api 3.6, use addMessageHandler and removeMessageHandler "
-                 "instead")]] void (*setMessageHandler)(VSMessageHandler handler, void* userData) noexcept;
+    void (*setMessageHandler)(VSMessageHandler handler, void* userData) noexcept;
     int (*setThreadCount)(int threads, VSCore* core) noexcept;
     const char* (*getPluginPath)(const VSPlugin* plugin) noexcept;
     const int64_t* (*propGetIntArray)(const VSMap* map, const char* key, int* error) noexcept;

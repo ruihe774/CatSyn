@@ -75,9 +75,8 @@ class Table final : public Object, public virtual ITable {
         vector_type;
     vector_type vec;
 
-    static constexpr size_t npos = static_cast<size_t>(-1);
-
   public:
+    using ITable::npos;
     explicit Table(const Table& other) noexcept;
     explicit Table(size_t reserve_capacity) noexcept;
     void clone(IObject** out) const noexcept final;
@@ -87,18 +86,15 @@ class Table final : public Object, public virtual ITable {
     size_t find(const char* key) const noexcept final;
     size_t size() const noexcept final;
     void clear() noexcept final;
-    size_t begin() const noexcept final;
-    size_t end() const noexcept final;
     size_t next(size_t ref) const noexcept final;
     size_t prev(size_t ref) const noexcept final;
 };
 
-class Substrate final : public Object, virtual public ISubstrate, public Shuttle {
+class Substrate final : public Object, virtual public ISubstrate {
   public:
     cat_ptr<IFilter> filter;
 
     VideoInfo get_video_info() const noexcept final;
-    INucleus* get_nucleus() noexcept final;
 
     Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept;
 };
@@ -154,7 +150,7 @@ class Nucleus final : public Object, virtual public INucleus, virtual public IFa
     ITable* get_ribosomes() noexcept final;
 
     void create_bytes(const void* data, size_t len, IBytes** out) noexcept final;
-    void create_array(const std::type_info& type, const void* data, size_t bytes_count, IArray** out) noexcept final;
+    void create_numeric(SampleType sample_type, const void* data, size_t bytes_count, INumeric** out) noexcept final;
 
     void create_frame(FrameInfo fi, const IBytes** planes, const size_t* strides, const ITable* props,
                       IFrame** out) noexcept final;

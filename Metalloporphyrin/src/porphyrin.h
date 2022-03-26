@@ -6,7 +6,6 @@
 #include <vector>
 
 #include <boost/container/small_vector.hpp>
-#include <boost/dll.hpp>
 
 #include <cathelper.h>
 #include <catsyn.h>
@@ -24,6 +23,7 @@ class Object : virtual public catsyn::IObject {
 };
 
 extern VSAPI api;
+extern std::unique_ptr<VSCore> core;
 
 struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
     struct HandlerInstance {
@@ -35,7 +35,6 @@ struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
         HandlerInstance(const HandlerInstance&) = delete;
         HandlerInstance(HandlerInstance&&) noexcept;
         HandlerInstance(VSMessageHandler handler, VSMessageHandlerFree freer, void* userData, int id) noexcept;
-        HandlerInstance& operator=(const HandlerInstance&) = delete;
         HandlerInstance& operator=(HandlerInstance&&) noexcept;
     };
 
@@ -52,23 +51,17 @@ int removeMessageHandler(int id) noexcept;
 void logMessage(int mt, const char* msg) noexcept;
 
 struct VSPlugin {
-    VSCore* core;
     catsyn::cat_ptr<catsyn::IEnzyme> enzyme;
-//    char args_buf[4096];
-//    char* pargs{args_buf};
-    // I'm sleepy
     std::map<std::string, std::string> arg_strs;
 };
 
 struct VSCore {
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     VSCoreInfo ci;
-    std::vector<std::unique_ptr<VSPlugin>> plugins;
+    std::map<std::string_view, std::unique_ptr<VSPlugin>> plugins;
+    std::map<std::string_view, VSPlugin*> ns_map;
     std::shared_mutex plugins_mutex;
 };
-
-extern std::vector<std::unique_ptr<VSCore>> cores;
-extern std::shared_mutex cores_mutex;
 
 VSCore* createCore(int threads) noexcept;
 void freeCore(VSCore* core) noexcept;
@@ -104,10 +97,10 @@ const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept;
 VSMap* getFramePropsRW(VSFrameRef* f) noexcept;
 
 struct VSMap {
-    catsyn::TableView<const catsyn::ITable> view;
+    catsyn::cat_ptr<const catsyn::ITable> table;
     explicit VSMap(const catsyn::ITable* table) noexcept;
     explicit VSMap(catsyn::cat_ptr<const catsyn::ITable> table) noexcept;
-    catsyn::TableView<catsyn::ITable>& get_mut() noexcept;
+    catsyn::ITable* get_mut() noexcept;
 };
 
 VSMap* createMap() noexcept;
@@ -139,7 +132,6 @@ int propSetFrame(VSMap* map, const char* key, const VSFrameRef* f, int append) n
 int propSetFunc(VSMap* map, const char* key, VSFuncRef* func, int append) noexcept;
 
 struct VSNodeRef {
-    catsyn::INucleus& nucl;
     catsyn::cat_ptr<catsyn::ISubstrate> substrate;
     catsyn::cat_ptr<catsyn::IOutput> output;
     VSVideoInfo vi;
@@ -155,7 +147,6 @@ const VSVideoInfo* getVideoInfo(VSNodeRef* node) noexcept;
 void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept;
 
 struct VSFunc final : Object, catsyn::IFunction {
-    VSCore* core;
     VSPublicFunction func;
     void* userData;
     VSFreeFuncData freer;
@@ -163,7 +154,7 @@ struct VSFunc final : Object, catsyn::IFunction {
 
     VSFunc(const VSFunc&) = delete;
     VSFunc(VSFunc&&) = delete;
-    VSFunc(VSCore* core, VSPublicFunction func, void* userData, VSFreeFuncData freer,
+    VSFunc(VSPublicFunction func, void* userData, VSFreeFuncData freer,
            std::optional<std::vector<catsyn::ArgSpec>> specs = std::nullopt) noexcept;
     ~VSFunc() final;
 
@@ -201,10 +192,7 @@ int getOutputIndex(VSFrameContext* frameCtx) noexcept;
 const char* getPluginPath(const VSPlugin* plugin) noexcept;
 
 struct VSRibosome final : Object, catsyn::IRibosome {
-    VSCore* core;
-    std::map<IObject*, boost::dll::shared_library> loaded;
     const char* get_identifier() const noexcept final;
     void synthesize_enzyme(const char* token, IObject** out) noexcept final;
     void hydrolyze_enzyme(IObject** inout) noexcept final;
-    explicit VSRibosome(VSCore* core) noexcept;
 };

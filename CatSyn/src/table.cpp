@@ -45,21 +45,13 @@ size_t Table::find(const char* key) const noexcept {
 
 size_t Table::size() const noexcept {
     size_t size = 0;
-    for (auto ref = begin(), ed = end(); ref != ed; ++size)
+    for (auto ref = next(npos); ref != npos; ++size)
         ref = next(ref);
     return size;
 }
 
 void Table::clear() noexcept {
     vec.clear();
-}
-
-size_t Table::begin() const noexcept {
-    return next(npos);
-}
-
-size_t Table::end() const noexcept {
-    return npos;
 }
 
 size_t Table::next(size_t ref) const noexcept {
@@ -79,7 +71,7 @@ size_t Table::prev(size_t ref) const noexcept {
 Table::Table(const Table& other) noexcept {
     const char* key;
     vec.reserve(other.vec.size());
-    for (auto ref = other.begin(), ed = other.end(); ref != ed; ref = next(ref))
+    for (auto ref = other.next(npos); ref != npos; ref = next(ref))
         vec.emplace_back(key, other.get(ref, &key));
 }
 
