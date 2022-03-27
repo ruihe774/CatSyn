@@ -1,3 +1,4 @@
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -23,8 +24,11 @@ struct FrameInstance {
           indulgence(0) {}
 };
 
-bool FrameInstanceTickGreater::operator()(const FrameInstance* l, const FrameInstance* r) noexcept {
-    return l->tick > r->tick;
+bool FrameInstanceTickGreater::operator()(const FrameInstance* l, const FrameInstance* r) const noexcept {
+    if (auto cmp = l->tick <=> r->tick; cmp == 0)
+        return l > r;
+    else
+        return cmp > 0;
 }
 
 Substrate::Substrate(Nucleus& nucl, cat_ptr<const IFilter> filter) noexcept {
@@ -123,21 +127,21 @@ static FrameInstance*
 construct(Nucleus& nucl, size_t tick,
           std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
           std::unordered_set<FrameInstance*>& alive,
-          std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
+          std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
           Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {},
           bool missed = false) noexcept;
 
 static void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
 
-static void
-post_work(Nucleus& nucl, FrameInstance* inst,
-          std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck) noexcept;
+static void post_work(
+    Nucleus& nucl, FrameInstance* inst,
+    std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck) noexcept;
 
 void maintainer(Nucleus& nucl) {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
     std::unordered_set<FrameInstance*> alive;
-    std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>> neck;
+    std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>> neck;
     std::unordered_set<std::pair<Substrate*, size_t>> history;
     std::unordered_map<Substrate*, unsigned> miss;
     size_t tick = 0;
@@ -178,9 +182,9 @@ void maintainer(Nucleus& nucl) {
             }
             for (auto& item : neck)
                 if (auto& sec = item.second; !sec.first && !sec.second.empty()) {
-                    auto bg = sec.second.begin();
-                    post_work_direct(nucl, *bg);
-                    sec.second.erase(bg);
+                    auto top = sec.second.end();
+                    post_work_direct(nucl, *--top);
+                    sec.second.erase(top);
                     sec.first = true;
                 }
         });
@@ -209,13 +213,13 @@ void maintainer(Nucleus& nucl) {
     }
 }
 
-FrameInstance* construct(Nucleus& nucl, size_t tick,
-                         std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
-                         std::unordered_set<FrameInstance*>& alive,
-                         std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck,
-                         std::unordered_set<std::pair<Substrate*, size_t>>& history,
-                         std::unordered_map<Substrate*, unsigned>& miss, Substrate* substrate, size_t frame_idx,
-                         std::unique_ptr<IOutput::Callback> callback, bool missed) noexcept {
+FrameInstance*
+construct(Nucleus& nucl, size_t tick,
+          std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>>& instances,
+          std::unordered_set<FrameInstance*>& alive,
+          std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
+          std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
+          Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback, bool missed) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end()) {
         auto inst = it->second.get();
@@ -282,7 +286,8 @@ void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, s
 }
 
 void post_work(Nucleus& nucl, FrameInstance* inst,
-               std::unordered_map<Substrate*, std::pair<bool, std::unordered_set<FrameInstance*>>>& neck) noexcept {
+               std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>&
+                   neck) noexcept {
     if (!inst->single_threaded)
         post_work_direct(nucl, inst);
     else

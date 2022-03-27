@@ -102,7 +102,7 @@ class Substrate final : public Object, virtual public ISubstrate {
 
 struct FrameInstance;
 struct FrameInstanceTickGreater {
-    bool operator()(const FrameInstance* l, const FrameInstance* r) noexcept;
+    bool operator()(const FrameInstance* l, const FrameInstance* r) const noexcept;
 };
 
 struct Construct {
