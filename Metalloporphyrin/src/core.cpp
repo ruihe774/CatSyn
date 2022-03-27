@@ -42,10 +42,11 @@ static bool created{false};
     throw std::logic_error("only one core can be created per process");
 }
 
-VSCore* createCore(int) noexcept {
+VSCore* createCore(int threadCount) noexcept {
     if (created)
         multiple_cores();
     created = true;
+    setThreadCount(threadCount, core.get());
     core->nucl->synthesize_enzymes();
     return core.get();
 }

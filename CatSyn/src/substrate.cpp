@@ -51,12 +51,11 @@ static void callbacker(Nucleus&);
 void Nucleus::react() noexcept {
     if (maintainer_thread)
         return;
-    auto thread_count = std::thread::hardware_concurrency();
     maintainer_thread = JThread(maintainer, std::ref(*this));
     set_thread_priority(maintainer_thread.value(), 1);
     callback_thread = JThread(callbacker, std::ref(*this));
     set_thread_priority(callback_thread.value(), 1);
-    for (size_t i = 0; i < thread_count; ++i)
+    for (size_t i = 0; i < config.thread_count; ++i)
         worker_threads.emplace_back(worker, std::ref(*this));
     logger.log(LogLevel::DEBUG, "Nucleus: reaction started");
 }

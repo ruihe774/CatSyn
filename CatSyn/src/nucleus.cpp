@@ -1,5 +1,11 @@
 #include <catimpl.h>
 
+NucleusConfig create_default_config(NucleusConfig tmpl) noexcept {
+    tmpl.thread_count = tmpl.thread_count ? tmpl.thread_count : std::thread::hardware_concurrency();
+    tmpl.mem_hint_mb = tmpl.mem_hint_mb ? tmpl.mem_hint_mb : 4096;
+    return tmpl;
+}
+
 Shuttle::Shuttle(Nucleus& nucl) noexcept : nucl(nucl) {}
 
 Nucleus::Nucleus() {
@@ -38,14 +44,18 @@ ITable* Nucleus::get_enzymes() noexcept {
     return enzymes.get();
 }
 
-void Nucleus::set_config(NucleusConfig) noexcept {}
+[[noreturn]] static void throw_set_config_when_reacting() {
+    throw std::logic_error("changing config is not allowed during reaction");
+}
+
+void Nucleus::set_config(NucleusConfig cfg) noexcept {
+    if (is_reacting())
+        throw_set_config_when_reacting();
+    config = create_default_config(cfg);
+}
 
 NucleusConfig Nucleus::get_config() const noexcept {
-    // stub
-    return {
-        std::thread::hardware_concurrency(),
-        4096,
-    };
+    return config;
 }
 
 CAT_API Version catsyn::get_version() noexcept {

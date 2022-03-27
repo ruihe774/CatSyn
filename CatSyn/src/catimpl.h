@@ -125,8 +125,12 @@ struct CallbackTask {
     std::exception_ptr exc;
 };
 
+NucleusConfig create_default_config(NucleusConfig tmpl = {}) noexcept;
+
 class Nucleus final : public Object, virtual public INucleus, virtual public IFactory {
   public:
+    NucleusConfig config{create_default_config()};
+
     Logger logger;
 
     cat_ptr<Table> finders;
