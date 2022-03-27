@@ -273,7 +273,8 @@ class INucleus : virtual public IRef {
     virtual void synthesize_enzymes() noexcept = 0;
     virtual ITable* get_enzymes() noexcept = 0;
 
-    virtual void register_filter(const IFilter* in, ISubstrate** out) noexcept = 0;
+    virtual ISubstrate* register_filter(const IFilter* filter) noexcept = 0;
+    virtual void unregister_filter(const IFilter* filter) noexcept = 0;
 
     virtual void set_config(NucleusConfig config) noexcept = 0;
     virtual NucleusConfig get_config() const noexcept = 0;

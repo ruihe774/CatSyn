@@ -6,6 +6,7 @@ VS_EXTERNAL_API(void) VapourSynthPluginInit(VSConfigPlugin configFunc, VSRegiste
     exprInitialize(configFunc, registerFunc, plugin);
     genericInitialize(configFunc, registerFunc, plugin);
     lutInitialize(configFunc, registerFunc, plugin);
+    boxBlurInitialize(configFunc, registerFunc, plugin);
     mergeInitialize(configFunc, registerFunc, plugin);
     reorderInitialize(configFunc, registerFunc, plugin);
     stdlibInitialize(configFunc, registerFunc, plugin);

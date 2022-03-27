@@ -5,6 +5,7 @@
 #include <thread>
 #include <vector>
 #include <variant>
+#include <map>
 
 #include <boost/container/small_vector.hpp>
 
@@ -137,6 +138,8 @@ class Nucleus final : public Object, virtual public INucleus, virtual public IFa
     cat_ptr<Table> ribosomes;
     cat_ptr<Table> enzymes;
 
+    std::map<const IFilter*, cat_ptr<ISubstrate>> substrates;
+
     SCQueue<MaintainTask> maintain_queue;
     SCQueue<CallbackTask> callback_queue;
     PriorityQueue<FrameInstance*, FrameInstanceTickGreater> work_queue;
@@ -166,7 +169,8 @@ class Nucleus final : public Object, virtual public INucleus, virtual public IFa
     void synthesize_enzymes() noexcept final;
     ITable* get_enzymes() noexcept final;
 
-    void register_filter(const IFilter* in, ISubstrate** out) noexcept final;
+    ISubstrate* register_filter(const IFilter* filter) noexcept final;
+    void unregister_filter(const IFilter* filter) noexcept final;
 
     void set_config(NucleusConfig config) noexcept final;
     NucleusConfig get_config() const noexcept final;

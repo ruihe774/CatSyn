@@ -283,11 +283,22 @@ static VSVideoInfo vi_cs_to_vs(catsyn::VideoInfo vi) {
 }
 
 VSNodeRef* propGetNode(const VSMap* map, const char* key, int index, int* error) noexcept {
-    auto substrate = const_cast<catsyn::ISubstrate*>(map_get<catsyn::ISubstrate>(map, key, index, error));
+    if (error)
+        *error = 0;
+    int err;
+    auto substrate = const_cast<catsyn::ISubstrate*>(map_get<catsyn::ISubstrate>(map, key, index, &err));
     if (substrate)
+    success:
         return new VSNodeRef{substrate, nullptr, vi_cs_to_vs(substrate->get_video_info())};
-    else
-        return nullptr;
+    else if (err == peType) {
+        auto filter = map_get<catsyn::IFilter>(map, key, index, &err);
+        if (filter) {
+            substrate = core->nucl->register_filter(filter);
+            goto success;
+        }
+    }
+    *error = err;
+    return nullptr;
 }
 
 const VSFrameRef* propGetFrame(const VSMap* map, const char* key, int index, int* error) noexcept {

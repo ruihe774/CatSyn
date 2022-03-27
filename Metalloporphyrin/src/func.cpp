@@ -64,9 +64,7 @@ void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore*, const VSAPI
     }
 
     if (auto filter = result.try_query<const catsyn::IFilter>(); filter) {
-        catsyn::cat_ptr<catsyn::ISubstrate> substrate;
-        core->nucl->register_filter(filter.get(), substrate.put());
-        out->get_mut()->set(out->table->find("clip"), substrate.get(), "clip");
+        out->get_mut()->set(out->table->find("clip"), core->nucl->register_filter(filter.get()), "clip");
     } else {
         auto table = result.query<const catsyn::ITable>();
         for (size_t ref = table->next(catsyn::ITable::npos); ref != catsyn::ITable::npos; ref = table->next(ref)) {

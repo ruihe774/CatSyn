@@ -35,8 +35,15 @@ VideoInfo Substrate::get_video_info() const noexcept {
     return filter->get_video_info();
 }
 
-void Nucleus::register_filter(const IFilter* in, ISubstrate** out) noexcept {
-    create_instance<Substrate>(out, *this, wrap_cat_ptr(in));
+ISubstrate* Nucleus::register_filter(const IFilter* filter) noexcept {
+    auto& out = substrates[filter];
+    if (!out)
+        create_instance<Substrate>(out.put(), *this, wrap_cat_ptr(filter));
+    return out.get();
+}
+
+void Nucleus::unregister_filter(const IFilter* filter) noexcept {
+    substrates.erase(filter);
 }
 
 MaintainTask::MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx,

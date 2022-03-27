@@ -2534,6 +2534,8 @@ void VS_CC stdlibInitialize(VSConfigPlugin configFunc, VSRegisterFunction regist
     registerFunc("StackHorizontal", "clips:clip[];", stackCreate, 0, plugin);
     registerFunc("BlankClip", "clip:clip:opt;width:int:opt;height:int:opt;format:int:opt;length:int:opt;fpsnum:int:opt;fpsden:int:opt;color:float[]:opt;keep:int:opt;", blankClipCreate, 0, plugin);
     registerFunc("AssumeFPS", "clip:clip;src:clip:opt;fpsnum:int:opt;fpsden:int:opt;", assumeFPSCreate, 0, plugin);
+    registerFunc("FrameEval", "clip:clip;eval:func;prop_src:clip[]:opt;", frameEvalCreate, 0, plugin);
+    registerFunc("ModifyFrame", "clip:clip;clips:clip[];selector:func;", modifyFrameCreate, 0, plugin);
     registerFunc("Transpose", "clip:clip;", transposeCreate, 0, plugin);
     registerFunc("PEMVerifier", "clip:clip;upper:float[]:opt;lower:float[]:opt;", pemVerifierCreate, 0, plugin);
     registerFunc("PlaneStats", "clipa:clip;clipb:clip:opt;plane:int:opt;prop:data:opt;", planeStatsCreate, 0, plugin);
