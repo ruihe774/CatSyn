@@ -196,3 +196,5 @@ struct VSRibosome final : Object, catsyn::IRibosome {
     void synthesize_enzyme(const char* token, IObject** out) noexcept final;
     void hydrolyze_enzyme(IObject** inout) noexcept final;
 };
+
+extern bool force_single_threaded_for_this_filter;

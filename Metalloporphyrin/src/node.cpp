@@ -162,13 +162,15 @@ void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit in
     init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core.get(), &api);
     auto filter = new VSFilter;
     filter->vi = vi_vs_to_cs(node->vi);
-    filter->flags = catsyn::FilterFlags((flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
-                                        (filterMode == fmParallel ? 0 : catsyn::ffSingleThreaded));
+    filter->flags = catsyn::FilterFlags(
+        (flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
+        (filterMode == fmParallel && !force_single_threaded_for_this_filter ? 0 : catsyn::ffSingleThreaded));
     filter->getFrame = getFrame;
     filter->freer = freer;
     filter->instanceData = instanceData;
     filter->is_source_filter = false;
     out->get_mut()->set(out->table->find("clip"), filter, "clip");
+    force_single_threaded_for_this_filter = false;
 }
 
 VSFilter::~VSFilter() {
