@@ -11,7 +11,7 @@ struct FrameInstance {
     cat_ptr<const IFrame> product;
     boost::container::small_vector<FrameInstance*, 10> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
-    std::unique_ptr<IOutput::Callback> callback;
+    std::unique_ptr<InnerCallback> callback;
     FrameData* frame_data;
     size_t tick;
     std::atomic_flag taken;
@@ -51,7 +51,7 @@ void Nucleus::unregister_filter(const IFilter* filter) noexcept {
 }
 
 MaintainTask::MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx,
-                           std::unique_ptr<IOutput::Callback> callback) noexcept
+                           std::unique_ptr<InnerCallback> callback) noexcept
     : variant(Construct{std::move(substrate), frame_idx, std::move(callback)}) {}
 MaintainTask::MaintainTask(FrameInstance* inst, std::exception_ptr exc) noexcept : variant(Notify{inst, exc}) {}
 
@@ -129,7 +129,7 @@ construct(Nucleus& nucl, size_t tick,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
-          Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {},
+          Substrate* substrate, size_t frame_idx, std::unique_ptr<InnerCallback> callback = {},
           bool missed = false) noexcept;
 
 static void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
@@ -219,7 +219,7 @@ construct(Nucleus& nucl, size_t tick,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
-          Substrate* substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback, bool missed) noexcept {
+          Substrate* substrate, size_t frame_idx, std::unique_ptr<InnerCallback> callback, bool missed) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end()) {
         auto inst = it->second.get();
@@ -296,23 +296,19 @@ void post_work(Nucleus& nucl, FrameInstance* inst,
 }
 
 void callbacker(Nucleus& nucl) {
-    nucl.callback_queue.stream([](CallbackTask&& task) { task.callback(task.frame.get(), task.exc); });
+    nucl.callback_queue.stream([](CallbackTask&& task) { task.callback(); });
 }
 
 class Output final : public Object, virtual public IOutput, public Shuttle {
   public:
     cat_ptr<Substrate> substrate;
 
-    void get_frame(size_t frame_idx, Callback cb) noexcept final {
+    void get_frame(size_t frame_idx, ICallback* cb) noexcept final {
         post_maintain_task(nucl, substrate, frame_idx,
-                           std::make_unique<IOutput::Callback>(
-                               [cb = std::move(cb), &nucl = this->nucl](const IFrame* frame, std::exception_ptr exc) {
-                                   nucl.callback_queue.push(CallbackTask{
-                                       std::move(const_cast<IOutput::Callback&>(cb)),
-                                       wrap_cat_ptr(frame),
-                                       exc,
-                                   });
-                               }));
+                           std::make_unique<InnerCallback>([cb = wrap_cat_ptr(cb), &nucl = this->nucl](
+                                                               const IFrame* frame, std::exception_ptr exc) {
+                               nucl.callback_queue.push(CallbackTask{[=]() { cb->invoke(frame, exc); }});
+                           }));
     }
 
     explicit Output(Nucleus& nucl, ISubstrate* substrate) noexcept

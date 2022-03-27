@@ -1,11 +1,12 @@
 #pragma once
 
+#include <functional>
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <thread>
-#include <vector>
 #include <variant>
-#include <map>
+#include <vector>
 
 #include <boost/container/small_vector.hpp>
 
@@ -41,7 +42,8 @@ class JThread final : public std::jthread {
     static void proxy(F f, Args... args) noexcept(noexcept(std::invoke(f, std::forward<Args>(args)...))) {
         try {
             std::invoke(f, std::forward<Args>(args)...);
-        } catch (StopRequested&) {}
+        } catch (StopRequested&) {
+        }
     }
 
     template<typename T> struct unbox_reference { typedef T type; };
@@ -105,10 +107,12 @@ struct FrameInstanceTickGreater {
     bool operator()(const FrameInstance* l, const FrameInstance* r) const noexcept;
 };
 
+typedef std::function<void(const IFrame* frame, std::exception_ptr exc)> InnerCallback;
+
 struct Construct {
     cat_ptr<Substrate> substrate;
     size_t frame_idx;
-    std::unique_ptr<IOutput::Callback> callback;
+    std::unique_ptr<InnerCallback> callback;
 };
 struct Notify {
     FrameInstance* inst;
@@ -116,14 +120,13 @@ struct Notify {
 };
 
 struct MaintainTask : std::variant<Construct, Notify> {
-    explicit MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx, std::unique_ptr<IOutput::Callback> callback = {}) noexcept;
+    explicit MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx,
+                          std::unique_ptr<InnerCallback> callback = {}) noexcept;
     explicit MaintainTask(FrameInstance* inst, std::exception_ptr exc = {}) noexcept;
 };
 
 struct CallbackTask {
-    IOutput::Callback callback;
-    cat_ptr<const IFrame> frame;
-    std::exception_ptr exc;
+    std::function<void()> callback;
 };
 
 NucleusConfig create_default_config(NucleusConfig tmpl = {}) noexcept;

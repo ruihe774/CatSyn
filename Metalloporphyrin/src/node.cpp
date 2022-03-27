@@ -22,16 +22,16 @@ void getFrameAsync(int n, VSNodeRef* node, VSFrameDoneCallback callback, void* u
     }
     if (!node->output)
         core->nucl->create_output(node->substrate.get(), node->output.put());
-    node->output->get_frame(n, [=](const catsyn::IFrame* frame, std::exception_ptr exc) {
-        if (exc)
-            try {
-                std::rethrow_exception(exc);
-            } catch (std::exception& exc) {
-                callback(userData, nullptr, n, node, exc.what());
-            }
-        else
-            callback(userData, new VSFrameRef{frame}, n, node, nullptr);
-    });
+    node->output->get_frame(n, catsyn::wrap_callback([=](const catsyn::IFrame* frame, std::exception_ptr exc) {
+                                   if (exc)
+                                       try {
+                                           std::rethrow_exception(exc);
+                                       } catch (std::exception& exc) {
+                                           callback(userData, nullptr, n, node, exc.what());
+                                       }
+                                   else
+                                       callback(userData, new VSFrameRef{frame}, n, node, nullptr);
+                               }).get());
 }
 
 const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) noexcept {
@@ -44,18 +44,18 @@ const VSFrameRef* getFrame(int n, VSNodeRef* node, char* errorMsg, int bufSize) 
     std::condition_variable cv;
     std::mutex m;
     const VSFrameRef* frame_ref = nullptr;
-    node->output->get_frame(n, [&](const catsyn::IFrame* frame, std::exception_ptr exc) {
-        if (exc)
-            try {
-                std::rethrow_exception(exc);
-            } catch (std::exception& exc) {
-                strcpy_s(errorMsg, bufSize, exc.what());
-            }
-        else
-            frame_ref = new VSFrameRef{frame};
-        std::lock_guard<std::mutex> guard(m);
-        cv.notify_one();
-    });
+    node->output->get_frame(n, catsyn::wrap_callback([&](const catsyn::IFrame* frame, std::exception_ptr exc) {
+                                   if (exc)
+                                       try {
+                                           std::rethrow_exception(exc);
+                                       } catch (std::exception& exc) {
+                                           strcpy_s(errorMsg, bufSize, exc.what());
+                                       }
+                                   else
+                                       frame_ref = new VSFrameRef{frame};
+                                   std::lock_guard<std::mutex> guard(m);
+                                   cv.notify_one();
+                               }).get());
     std::unique_lock<std::mutex> guard(m);
     cv.wait(guard);
     return frame_ref;

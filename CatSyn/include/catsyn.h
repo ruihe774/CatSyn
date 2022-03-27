@@ -244,10 +244,14 @@ class IFilter : virtual public IRef {
     virtual void drop_frame_data(FrameData* frame_data) const noexcept = 0;
 };
 
+class ICallback: virtual public IRef {
+  public:
+    virtual void invoke(const IFrame* frame, std::exception_ptr exc) noexcept = 0;
+};
+
 class IOutput : virtual public IRef {
   public:
-    typedef std::function<void(const IFrame* frame, std::exception_ptr exc)> Callback;
-    virtual void get_frame(size_t frame_idx, Callback cb) noexcept = 0;
+    virtual void get_frame(size_t frame_idx, ICallback* cb) noexcept = 0;
 };
 
 struct NucleusConfig {

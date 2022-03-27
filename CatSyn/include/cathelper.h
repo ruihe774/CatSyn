@@ -233,4 +233,29 @@ inline size_t default_stride(FrameInfo fi, unsigned idx) noexcept {
     return stride;
 }
 
+namespace detail {
+
+template<typename F>
+class CallbackWrapper final : virtual public ICallback {
+    F f;
+
+  public:
+    explicit CallbackWrapper(F&& f) noexcept : f(std::move(f)) {}
+
+    void invoke(const IFrame* frame, std::exception_ptr exc) noexcept final {
+        std::invoke(f, frame, exc);
+    }
+
+    void drop() noexcept final {
+        delete this;
+    }
+};
+
+}
+
+template<typename F>
+cat_ptr<ICallback> wrap_callback(F&& f) noexcept {
+    return wrap_cat_ptr(new detail::CallbackWrapper{std::move(f)});
+}
+
 } // namespace catsyn
