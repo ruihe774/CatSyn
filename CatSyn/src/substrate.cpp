@@ -277,6 +277,7 @@ construct(Nucleus& nucl, size_t tick,
 }
 
 void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept {
+    inst->substrate->filter->drop_frame_data(inst->frame_data);
     if (inst->callback)
         (*inst->callback)(nullptr, exc);
     for (auto output : inst->outputs)
