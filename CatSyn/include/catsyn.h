@@ -30,7 +30,7 @@ class IObject {
 
     void release() const noexcept {
         auto rc = refcount.fetch_sub(1, std::memory_order_release) - 1;
-        if (rc == 0) {
+        if (rc == 0) [[unlikely]] {
             std::atomic_thread_fence(std::memory_order_acquire);
             const_cast<IObject*>(this)->drop();
         }
