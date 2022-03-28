@@ -205,10 +205,8 @@ void maintainer(Nucleus& nucl) {
             next:
                 ++it;
             }
-            if (history.size() > 65535) {
-                nucl.logger.log(LogLevel::DEBUG, "Nucleus: history forgotten");
+            if (history.size() > 65535)
                 history.clear();
-            }
         }
     }
 }
