@@ -134,7 +134,7 @@ void round_copy(void* __restrict dst, const void* __restrict src, size_t size) n
     else if (size <= 256 * 1024)
         __movsb(static_cast<unsigned char*>(dst), static_cast<const unsigned char*>(src), size);
     else
-        for (size_t i = 0; i < (size + 31) / 32; ++i) {
+        for (size_t i = 0; i < ((size + 31) / 32 + 7) / 8 * 8; ++i) {
             auto m = _mm256_load_si256((const __m256i*)(src) + i);
             _mm256_stream_si256((__m256i*)(dst) + i, m);
         }
