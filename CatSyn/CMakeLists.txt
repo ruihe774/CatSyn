@@ -7,18 +7,18 @@ project(CatSyn
 )
 
 add_library(allostery_lib STATIC
-    src/allostery.cpp
+    src/allostery/allostery.cpp
 )
 target_sources(allostery_lib PUBLIC
-    src/allostery.h
+    src/allostery/allostery.h
 )
-target_include_directories(allostery_lib PUBLIC src)
+target_include_directories(allostery_lib PUBLIC src/allostery)
 target_link_libraries(allostery_lib PRIVATE snmalloc_lib)
 add_library(allostery SHARED
-    src/allostery.cpp
-    src/allostery.h
+    src/allostery/allostery.cpp
+    src/allostery/allostery.h
 )
-target_include_directories(allostery PRIVATE src)
+target_include_directories(allostery PRIVATE src/allostery)
 target_link_libraries(allostery PRIVATE snmalloc_lib)
 target_link_libraries(allostery INTERFACE allostery_lib)
 target_compile_definitions(allostery PRIVATE ALLOSTERY_IMPL)
