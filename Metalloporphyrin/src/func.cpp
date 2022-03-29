@@ -1,7 +1,5 @@
 #include <string>
 
-#include <boost/container/flat_set.hpp>
-
 #include <porphyrin.h>
 
 VSFunc::VSFunc(VSPublicFunction func, void* userData, VSFreeFuncData freer,
@@ -81,21 +79,7 @@ void freeFunc(VSFuncRef* f) noexcept {
     delete f;
 }
 
-bool force_single_threaded_for_this_filter = false;
-static const class ParallelBlacklist {
-    boost::container::small_flat_set<std::string_view, 8> list;
-
-  public:
-    ParallelBlacklist() noexcept {
-        list.emplace("club.amusement.eedi2cuda");
-        list.emplace("com.wolframrhodium.bm3dcuda");
-        list.emplace("com.wolframrhodium.bm3dcuda_rtc");
-    }
-
-    bool is_blacklisted(const char* identifier) const noexcept {
-        return list.contains(identifier);
-    }
-} parallel_blacklist;
+std::stack<VSPlugin*> plugin_invoke_stack;
 
 VSMap* invoke(VSPlugin* plugin, const char* name, const VSMap* args) noexcept {
     auto map = createMap();
@@ -107,7 +91,8 @@ VSMap* invoke(VSPlugin* plugin, const char* name, const VSMap* args) noexcept {
         return map;
     }
     VSFuncRef func_ref{func};
-    force_single_threaded_for_this_filter = parallel_blacklist.is_blacklisted(plugin->enzyme->get_identifier());
+    plugin_invoke_stack.push(plugin);
     callFunc(&func_ref, args, map, core.get(), &api);
+    plugin_invoke_stack.pop();
     return map;
 }

@@ -2,6 +2,7 @@
 #include <variant>
 
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include <porphyrin.h>
 
@@ -152,25 +153,42 @@ static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
     throw std::invalid_argument("nfIsCache not supported");
 }
 
+static const class ParallelBlacklist {
+    boost::container::small_flat_set<std::string_view, 8> list;
+
+  public:
+    ParallelBlacklist() noexcept {
+        list.emplace("club.amusement.eedi2cuda");
+        list.emplace("com.wolframrhodium.bm3dcuda");
+        list.emplace("com.wolframrhodium.bm3dcuda_rtc");
+    }
+
+    bool is_blacklisted(const char* identifier) const noexcept {
+        return list.contains(identifier);
+    }
+} parallel_blacklist;
+
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
                   VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore*) noexcept {
     if (filterMode >= fmSerial)
         fm_not_support();
     if (flags > nfMakeLinear || flags & nfIsCache)
         nf_not_support();
+    auto plugin = plugin_invoke_stack.top();
     std::unique_ptr<VSNodeRef> node(new VSNodeRef);
     init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core.get(), &api);
     auto filter = new VSFilter;
     filter->vi = vi_vs_to_cs(node->vi);
     filter->flags = catsyn::FilterFlags(
-        (flags & nfMakeLinear ? catsyn::ffMakeLinear : 0) |
-        (filterMode == fmParallel && !force_single_threaded_for_this_filter ? 0 : catsyn::ffSingleThreaded));
+        (flags & nfMakeLinear ? catsyn::ffMakeLinear : catsyn::ffNormal) |
+        (filterMode == fmParallel && !parallel_blacklist.is_blacklisted(plugin->enzyme->get_identifier())
+             ? catsyn::ffNormal
+             : catsyn::ffSingleThreaded));
     filter->getFrame = getFrame;
     filter->freer = freer;
     filter->instanceData = instanceData;
     filter->is_source_filter = false;
     out->get_mut()->set(out->table->find("clip"), filter, "clip");
-    force_single_threaded_for_this_filter = false;
 }
 
 VSFilter::~VSFilter() {

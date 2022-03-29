@@ -3,6 +3,7 @@
 #include <map>
 #include <optional>
 #include <shared_mutex>
+#include <stack>
 #include <vector>
 
 #include <boost/container/small_vector.hpp>
@@ -197,4 +198,4 @@ struct VSRibosome final : Object, catsyn::IRibosome {
     void hydrolyze_enzyme(IObject** inout) noexcept final;
 };
 
-extern bool force_single_threaded_for_this_filter;
+extern std::stack<VSPlugin*> plugin_invoke_stack;
