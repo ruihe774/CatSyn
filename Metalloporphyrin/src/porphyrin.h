@@ -26,7 +26,7 @@ class Object : virtual public catsyn::IObject {
 extern VSAPI api;
 extern std::unique_ptr<VSCore> core;
 
-struct UserLogSink final : Object, catsyn::ILogSink, catsyn::IRef {
+struct UserLogSink final : Object, virtual catsyn::ILogSink, virtual catsyn::IRef {
     struct HandlerInstance {
         VSMessageHandler handler;
         VSMessageHandlerFree freer;
@@ -147,7 +147,7 @@ void requestFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexce
 const VSVideoInfo* getVideoInfo(VSNodeRef* node) noexcept;
 void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept;
 
-struct VSFunc final : Object, catsyn::IFunction {
+struct VSFunc final : Object, virtual catsyn::IFunction {
     VSPublicFunction func;
     void* userData;
     VSFreeFuncData freer;
@@ -192,7 +192,7 @@ void releaseFrameEarly(VSNodeRef* node, int n, VSFrameContext* frameCtx) noexcep
 int getOutputIndex(VSFrameContext* frameCtx) noexcept;
 const char* getPluginPath(const VSPlugin* plugin) noexcept;
 
-struct VSRibosome final : Object, catsyn::IRibosome {
+struct VSRibosome final : Object, virtual catsyn::IRibosome {
     const char* get_identifier() const noexcept final;
     void synthesize_enzyme(const char* token, IObject** out) noexcept final;
     void hydrolyze_enzyme(IObject** inout) noexcept final;

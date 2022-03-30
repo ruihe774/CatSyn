@@ -116,7 +116,7 @@ void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept 
                                       "Metalloporphyrin: returning multiple clips are not supported (setVideoInfo)");
 }
 
-struct VSFilter final : Object, catsyn::IFilter {
+struct VSFilter final : Object, virtual catsyn::IFilter {
     catsyn::VideoInfo vi;
     catsyn::FilterFlags flags;
     VSFilterGetFrame getFrame;
