@@ -142,21 +142,22 @@ void Nucleus::synthesize_enzymes() noexcept {
             cat_ptr<IObject> obj;
             ribosome->synthesize_enzyme(token, obj.put());
             if (obj) {
-                // TODO: hydrolyze overwritten enzymes and ribosomes
                 if (auto enzyme = obj.try_query<IEnzyme>(); enzyme) {
                     std::string_view id = enzyme->get_identifier();
-                    auto jt = ezs.find(id);
-                    if (jt != ezs.end())
+                    if (!ezs.emplace(id, enzyme).second) {
                         logger.log(LogLevel::WARNING,
-                                   format_c("Nucleus: enzyme '{}' is registered multiple times", id));
-                    ezs.emplace_hint(jt, id, std::move(enzyme));
-                } else if (auto ribosome = obj.try_query<IRibosome>(); ribosome) {
-                    auto id = ribosome->get_identifier();
+                                   format_c("Nucleus: enzyme '{}' cannot be registered multiple times", id));
+                        ribosome->hydrolyze_enzyme(reinterpret_cast<IObject**>(enzyme.addressof()));
+                    }
+                } else if (auto rbs = obj.try_query<IRibosome>(); rbs) {
+                    auto id = rbs->get_identifier();
                     auto ref = ribosomes->find(id);
-                    if (ref != ITable::npos)
+                    if (ref != ITable::npos) {
                         logger.log(LogLevel::WARNING,
-                                   format_c("Nucleus: ribosome '{}' is registered multiple times", id));
-                    ribosomes->set(ref, ribosome.get(), id);
+                                   format_c("Nucleus: ribosome '{}' cannot be registered multiple times", id));
+                        ribosome->hydrolyze_enzyme(reinterpret_cast<IObject**>(rbs.addressof()));
+                    } else
+                        ribosomes->set(ref, rbs.get(), id);
                 } else
                     terminate_with_msg("the synthesized product is not enzyme nor ribosome");
                 goto synthesized;
