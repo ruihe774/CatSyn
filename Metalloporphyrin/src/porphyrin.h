@@ -55,7 +55,6 @@ void logMessage(int mt, const char* msg) noexcept;
 
 struct VSPlugin {
     catsyn::cat_ptr<catsyn::IEnzyme> enzyme;
-    std::map<std::string, std::string> arg_strs;
 };
 
 struct VSCore {
