@@ -38,14 +38,14 @@ template<typename... Args> void format_to_err(fmt::format_string<Args...> fmt, A
     write_err(fmt_buf, format_c_impl(std::move(fmt), std::forward<Args>(args)...));
 }
 
-[[noreturn]] inline void terminate_with_msg(const char* msg) noexcept {
+[[noreturn]] inline void panic(const char* msg) noexcept {
     format_to_err("{}\n", msg);
     std::terminate();
 }
 
 inline void cond_check(bool cond, const char* msg) noexcept {
     if (!cond) [[unlikely]]
-        terminate_with_msg(msg);
+        panic(msg);
 }
 
 inline void buffer_size_check(bool cond) noexcept {
@@ -53,7 +53,7 @@ inline void buffer_size_check(bool cond) noexcept {
 }
 
 [[noreturn]] inline void not_implemented() noexcept {
-    terminate_with_msg("not implemented");
+    panic("not implemented");
 }
 
 [[noreturn]] inline void throw_system_error();

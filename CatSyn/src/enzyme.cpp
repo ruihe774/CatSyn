@@ -159,7 +159,7 @@ void Nucleus::synthesize_enzymes() noexcept {
                     } else
                         ribosomes->set(ref, rbs.get(), id);
                 } else
-                    terminate_with_msg("the synthesized product is not enzyme nor ribosome");
+                    panic("the synthesized product is not enzyme nor ribosome");
                 goto synthesized;
             }
         }

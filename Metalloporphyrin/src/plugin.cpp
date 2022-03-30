@@ -81,7 +81,7 @@ std::string unparse_arg_string(const catsyn::ArgSpec* args, size_t count) noexce
         else if (arg_type == typeid(catsyn::IFunction))
             r += "func";
         else
-            terminate_with_msg("unsupported argument type");
+            panic("unsupported argument type");
         if (arg.array)
             r += "[]";
         if (!arg.required)

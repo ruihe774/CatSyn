@@ -12,7 +12,7 @@ static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) noexcept {
     case catsyn::LogLevel::WARNING:
         return mtWarning;
     default:
-        terminate_with_msg("unknown log level");
+        panic("unknown log level");
     }
 }
 
@@ -90,9 +90,9 @@ static catsyn::LogLevel msgtype_to_loglevel(int mt, const char* msg) noexcept {
     case mtCritical:
         return catsyn::LogLevel::WARNING;
     case mtFatal:
-        terminate_with_msg(msg);
+        panic(msg);
     default:
-        terminate_with_msg("unknown message type");
+        panic("unknown message type");
     }
 }
 
