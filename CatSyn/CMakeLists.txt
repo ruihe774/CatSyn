@@ -23,6 +23,15 @@ target_link_libraries(allostery PRIVATE snmalloc_lib)
 target_link_libraries(allostery INTERFACE allostery_lib)
 target_compile_definitions(allostery PRIVATE ALLOSTERY_IMPL)
 
+add_library(tatabox INTERFACE)
+target_sources(tatabox PUBLIC
+    src/tatabox/tatabox.h
+    src/tatabox/pal/windows.h
+    src/tatabox/pal/posix.h
+)
+target_include_directories(tatabox INTERFACE src/tatabox)
+target_link_libraries(tatabox INTERFACE fmt)
+
 add_library(catsyn SHARED
     src/catimpl.h
     src/queue.h
@@ -41,8 +50,7 @@ target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
 target_include_directories(catsyn PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(catsyn PRIVATE allostery)
-target_link_libraries(catsyn PRIVATE fmt)
-target_link_libraries(catsyn PRIVATE WIL)
+target_link_libraries(catsyn PRIVATE tatabox)
 target_link_libraries(catsyn PRIVATE Boost::container)
 
 configure_file(src/catcfg.h.in catcfg.h)

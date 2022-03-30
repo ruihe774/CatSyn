@@ -3,14 +3,13 @@
 #include <functional>
 #include <map>
 #include <optional>
-#include <stdexcept>
 #include <thread>
 #include <variant>
 #include <vector>
 
 #include <boost/container/small_vector.hpp>
 
-#include <fmt/format.h>
+#include <tatabox.h>
 
 #define CAT_IMPL
 
@@ -183,36 +182,3 @@ class Nucleus final : public Object, virtual public INucleus, virtual public IFa
 
     void create_output(ISubstrate* substrate, IOutput** output) noexcept final;
 };
-
-class NotImplemted : public std::logic_error {
-  public:
-    NotImplemted() : std::logic_error("not implemented") {}
-};
-
-[[noreturn]] inline void not_implemented() {
-    throw NotImplemted();
-}
-
-[[noreturn]] inline void insufficient_buffer() {
-    throw std::runtime_error("insufficient buffer");
-}
-
-[[noreturn]] void throw_system_error();
-
-template<typename... Args> const char* format_c(fmt::format_string<Args...> fmt, Args&&... args) noexcept {
-    thread_local char buf[4096];
-    auto size = fmt::format_to_n(buf, sizeof(buf) - 1, std::move(fmt), std::forward<Args>(args)...).size;
-    if (size >= sizeof(buf))
-        insufficient_buffer();
-    buf[size] = 0;
-    return buf;
-}
-
-template<typename T, typename Char>
-struct fmt::formatter<T, Char, std::enable_if_t<std::is_base_of_v<std::exception, T>>> : fmt::formatter<const char*> {
-    template<typename FormatContext> constexpr auto format(const std::exception& exc, FormatContext& ctx) const {
-        return fmt::formatter<const char*>::format(exc.what(), ctx);
-    }
-};
-
-void set_thread_priority(std::jthread& thread, int priority, bool allow_boost = true) noexcept;

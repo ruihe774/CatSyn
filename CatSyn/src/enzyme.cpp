@@ -2,32 +2,16 @@
 #include <map>
 #include <string_view>
 
-#include <string.h>
-
-#include <Windows.h>
-
-#include <wil/resource.h>
-
 #include <catimpl.h>
 
-extern "C" IMAGE_DOS_HEADER __ImageBase;
-
-static std::filesystem::path get_current_dll_filename() noexcept {
-    auto current_module = reinterpret_cast<HMODULE>(&__ImageBase);
-    wchar_t wbuf[2048];
-    GetModuleFileNameW(current_module, wbuf, sizeof(wbuf));
-    if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-        insufficient_buffer();
-    return wbuf;
-}
-
-static wchar_t* u2w(const char* s) noexcept {
-    thread_local wchar_t wbuf[2048];
-    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, wbuf, sizeof(wbuf));
-    if (wlen == 0)
-        insufficient_buffer();
-    return wbuf;
-}
+#ifdef _WIN32
+#define DLL_SUFFIX L".dll"
+#define INIT_FUNC_SYMBOL "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z"
+#else
+#define DLL_SUFFIX ".so"
+// STUB
+#define INIT_FUNC_SYMBOL ""
+#endif
 
 class DllEnzymeFinder final : public Object, virtual public IEnzymeFinder, public Shuttle {
     std::filesystem::path path;
@@ -37,7 +21,7 @@ class DllEnzymeFinder final : public Object, virtual public IEnzymeFinder, publi
     static std::filesystem::path normalize(const char* s) noexcept {
         std::filesystem::path path;
         if (s[0] == '@' && (s[1] == '/' || s[1] == '\\')) {
-            path = get_current_dll_filename();
+            path = SharedLibrary::get_current_module_path();
             path.remove_filename();
             path += s + 2;
         } else {
@@ -63,7 +47,7 @@ class DllEnzymeFinder final : public Object, virtual public IEnzymeFinder, publi
                 try {
                     for (auto&& entry : std::filesystem::directory_iterator(path))
                         if (auto&& dll_path = entry.path();
-                            entry.is_regular_file() && _wcsicmp(dll_path.extension().c_str(), L".dll") == 0)
+                            entry.is_regular_file() && dll_path.extension() == DLL_SUFFIX)
                             tokens.emplace_back(prefix + dll_path.string());
                 } catch (std::filesystem::filesystem_error& err) {
                     this->nucl.logger.log(
@@ -84,11 +68,7 @@ void Nucleus::create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) no
 }
 
 class CatSynV1Ribosome final : public Object, virtual public IRibosome, public Shuttle {
-    std::map<IObject*, wil::unique_hmodule> loaded;
-
-    [[noreturn]] static void hydrolyze_non_unique() {
-        throw std::runtime_error("attempt to hydrolyze an enzyme by non-unique reference");
-    }
+    std::map<IObject*, SharedLibrary> loaded;
 
   public:
     const char* get_identifier() const noexcept final {
@@ -98,25 +78,21 @@ class CatSynV1Ribosome final : public Object, virtual public IRibosome, public S
     void synthesize_enzyme(const char* token, IObject** out) noexcept final {
         *out = nullptr;
         if (std::string_view{token}.starts_with("dll:")) {
-            auto lib = wil::unique_hmodule{LoadLibraryExW(
-                u2w(token + 4), nullptr, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR)};
-            if (!lib)
-                return;
-            auto init_func = reinterpret_cast<void (*)(INucleus*, IObject**)>(
-                GetProcAddress(lib.get(), "?catsyn_enzyme_init@@YAXPEAVINucleus@catsyn@@PEAPEAVIObject@2@@Z"));
-            if (!init_func)
-                return;
-            init_func(&this->nucl, out);
-            if (*out)
-                loaded.emplace(*out, std::move(lib));
+            try {
+                auto lib = SharedLibrary(token + 4);
+                auto init_func = lib.get_function<void(INucleus*, IObject**)>(INIT_FUNC_SYMBOL);
+                init_func(&this->nucl, out);
+                if (*out)
+                    loaded.emplace(*out, std::move(lib));
+            } catch (std::system_error&) {
+            }
         }
     }
 
     void hydrolyze_enzyme(IObject** inout) noexcept final {
         auto it = loaded.find(*inout);
         if (it != loaded.end()) {
-            if (!(*inout)->is_unique())
-                hydrolyze_non_unique();
+            cond_check((*inout)->is_unique(), "attempt to hydrolyze an enzyme by non-unique reference");
             (*inout)->release();
             *inout = nullptr;
             loaded.erase(it);
@@ -143,10 +119,6 @@ template<typename T> static void dedup(std::vector<T>& vec) noexcept {
     for (auto i : idx)
         new_vec.emplace_back(std::move(vec[i]));
     vec = std::move(new_vec);
-}
-
-[[noreturn]] static void not_enzyme_nor_ribosome() {
-    throw std::runtime_error("the synthesized product is not enzyme nor ribosome");
 }
 
 void Nucleus::synthesize_enzymes() noexcept {
@@ -187,7 +159,7 @@ void Nucleus::synthesize_enzymes() noexcept {
                                    format_c("Nucleus: ribosome '{}' is registered multiple times", id));
                     ribosomes->set(ref, ribosome.get(), id);
                 } else
-                    not_enzyme_nor_ribosome();
+                    terminate_with_msg("the synthesized product is not enzyme nor ribosome");
                 goto synthesized;
             }
         }
