@@ -82,17 +82,11 @@ struct VSFrameContext : catsyn::FrameData {
     explicit VSFrameContext(size_t frame_idx) noexcept : frame_idx(frame_idx), error(nullptr) {}
 };
 
-[[noreturn]] static void frame_not_requested() {
-    throw std::logic_error("the filter attempts to get a frame that has not been requested");
-}
-
 const VSFrameRef* getFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept {
     auto& input_frames = std::get<VSFrameContext::input_map>(frameCtx->frames);
-    if (auto it = input_frames.find(catsyn::FrameSource{node->substrate.get(), static_cast<size_t>(n)});
-        it != input_frames.end())
-        return new VSFrameRef{it->second};
-    else
-        frame_not_requested();
+    auto it = input_frames.find(catsyn::FrameSource{node->substrate.get(), static_cast<size_t>(n)});
+    cond_check(it != input_frames.end(), "the filter attempts to get a frame that has not been requested");
+    return new VSFrameRef{it->second};
 }
 
 void requestFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept {
@@ -145,14 +139,6 @@ static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
     return cvi;
 }
 
-[[noreturn]] static void fm_not_support() {
-    throw std::invalid_argument("fmSerial not supported");
-}
-
-[[noreturn]] static void nf_not_support() {
-    throw std::invalid_argument("nfIsCache not supported");
-}
-
 static const class ParallelBlacklist {
     boost::container::small_flat_set<std::string_view, 8> list;
 
@@ -170,10 +156,8 @@ static const class ParallelBlacklist {
 
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
                   VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore*) noexcept {
-    if (filterMode >= fmSerial)
-        fm_not_support();
-    if (flags > nfMakeLinear || flags & nfIsCache)
-        nf_not_support();
+    cond_check(filterMode < fmSerial, "fmSerial is not supported");
+    cond_check(flags <= nfMakeLinear && (flags & nfIsCache) == 0, "nfIsCache is not supported");
     auto plugin = plugin_invoke_stack.top();
     std::unique_ptr<VSNodeRef> node(new VSNodeRef);
     init(const_cast<VSMap*>(in), out, &instanceData, reinterpret_cast<VSNode*>(node.get()), core.get(), &api);
@@ -204,7 +188,7 @@ catsyn::VideoInfo VSFilter::get_video_info() const noexcept {
     return vi;
 }
 
-[[noreturn]] void throw_filter_error(const char* msg) {
+[[noreturn]] void throw_filter_error(const std::string& msg) {
     throw std::runtime_error(msg);
 }
 
@@ -243,10 +227,6 @@ void VSFilter::process_frame(const catsyn::IFrame* const* input_frames, catsyn::
 void VSFilter::drop_frame_data(catsyn::FrameData* frame_data) const noexcept {
     if (frame_data)
         core->nucl->get_logger()->log(catsyn::LogLevel::WARNING, "VSFilter: frame data leaked");
-}
-
-[[noreturn]] static void not_implemented() {
-    throw std::logic_error("not implemented");
 }
 
 void queryCompletedFrame(VSNodeRef** node, int* n, VSFrameContext* frameCtx) noexcept {

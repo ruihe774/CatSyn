@@ -40,4 +40,9 @@ class SharedLibrary {
         // STUB
         return "";
     }
+
+    SharedLibrary(const SharedLibrary&) = delete;
+    SharedLibrary(SharedLibrary&& other) noexcept {
+        // STUB
+    }
 };

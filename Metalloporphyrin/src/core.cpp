@@ -38,13 +38,8 @@ VSCore* createCore() noexcept {
 std::unique_ptr<VSCore> core{createCore()};
 static bool created{false};
 
-[[noreturn]] static void multiple_cores() {
-    throw std::logic_error("only one core can be created per process");
-}
-
 VSCore* createCore(int threadCount) noexcept {
-    if (created)
-        multiple_cores();
+    cond_check(!created, "only one core can be created per process");
     created = true;
     setThreadCount(threadCount, core.get());
     core->nucl->synthesize_enzymes();

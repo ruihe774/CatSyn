@@ -4,7 +4,7 @@
 
 UserLogSink sink;
 
-static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) {
+static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) noexcept {
     switch (level) {
     case catsyn::LogLevel::DEBUG:
         return mtDebug;
@@ -12,7 +12,7 @@ static VSMessageType loglevel_to_msgtype(catsyn::LogLevel level) {
     case catsyn::LogLevel::WARNING:
         return mtWarning;
     default:
-        throw std::logic_error("unknown log level");
+        terminate_with_msg("unknown log level");
     }
 }
 
@@ -82,7 +82,7 @@ int removeMessageHandler(int id) noexcept {
         return 0;
 }
 
-static catsyn::LogLevel msgtype_to_loglevel(int mt, const char* msg) {
+static catsyn::LogLevel msgtype_to_loglevel(int mt, const char* msg) noexcept {
     switch (mt) {
     case mtDebug:
         return catsyn::LogLevel::DEBUG;
@@ -90,9 +90,9 @@ static catsyn::LogLevel msgtype_to_loglevel(int mt, const char* msg) {
     case mtCritical:
         return catsyn::LogLevel::WARNING;
     case mtFatal:
-        throw std::runtime_error(msg);
+        terminate_with_msg(msg);
     default:
-        throw std::logic_error("unknown message type");
+        terminate_with_msg("unknown message type");
     }
 }
 

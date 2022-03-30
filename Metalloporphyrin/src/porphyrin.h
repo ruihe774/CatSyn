@@ -8,6 +8,8 @@
 
 #include <boost/container/small_vector.hpp>
 
+#include <tatabox.h>
+
 #include <cathelper.h>
 #include <catsyn.h>
 
@@ -60,7 +62,6 @@ struct VSCore {
     catsyn::cat_ptr<catsyn::INucleus> nucl;
     VSCoreInfo ci;
     std::map<std::string_view, std::unique_ptr<VSPlugin>> plugins;
-    std::map<std::string_view, VSPlugin*> ns_map;
     std::shared_mutex plugins_mutex;
 };
 
@@ -181,7 +182,7 @@ VSPlugin* getPluginByNs(const char* ns, VSCore* core) noexcept;
 VSMap* getPlugins(VSCore* core) noexcept;
 VSMap* getFunctions(VSPlugin* plugin) noexcept;
 
-catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf);
+catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf) noexcept;
 void createFilter(const VSMap* in, VSMap* out, const char* name, VSFilterInit init, VSFilterGetFrame getFrame,
                   VSFilterFree freer, int filterMode, int flags, void* instanceData, VSCore* core) noexcept;
 void setFilterError(const char* errorMessage, VSFrameContext* frameCtx) noexcept;
@@ -193,6 +194,7 @@ int getOutputIndex(VSFrameContext* frameCtx) noexcept;
 const char* getPluginPath(const VSPlugin* plugin) noexcept;
 
 struct VSRibosome final : Object, virtual catsyn::IRibosome {
+    std::map<IObject*, SharedLibrary> loaded;
     const char* get_identifier() const noexcept final;
     void synthesize_enzyme(const char* token, IObject** out) noexcept final;
     void hydrolyze_enzyme(IObject** inout) noexcept final;

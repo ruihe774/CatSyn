@@ -13,15 +13,14 @@ catsyn::cat_ptr<catsyn::IFrame>& VSFrameRef::get_mut() noexcept {
 }
 
 static catsyn::FrameFormat ff_vs_to_cs(int colorFamily, int sampleType, int bitsPerSample, int subSamplingW,
-                                       int subSamplingH) {
-    if (colorFamily > cmYUV)
-        throw std::logic_error("unimplemented color family");
+                                       int subSamplingH) noexcept {
+    cond_check(colorFamily <= cmYUV, "unimplemented color family");
     return catsyn::make_frame_format(static_cast<catsyn::ColorFamily>(colorFamily / 1000000),
                                      static_cast<catsyn::SampleType>(sampleType), bitsPerSample, subSamplingW,
                                      subSamplingH);
 }
 
-catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf) {
+catsyn::FrameFormat ff_vs_to_cs(const VSFormat* vsf) noexcept {
     return ff_vs_to_cs(vsf->colorFamily, vsf->sampleType, vsf->bitsPerSample, vsf->subSamplingW, vsf->subSamplingH);
 }
 

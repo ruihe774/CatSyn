@@ -77,16 +77,15 @@ class CatSynV1Ribosome final : public Object, virtual public IRibosome, public S
 
     void synthesize_enzyme(const char* token, IObject** out) noexcept final {
         *out = nullptr;
-        if (std::string_view{token}.starts_with("dll:")) {
+        if (std::string_view{token}.starts_with("dll:"))
             try {
-                auto lib = SharedLibrary(token + 4);
+                SharedLibrary lib{token + 4};
                 auto init_func = lib.get_function<void(INucleus*, IObject**)>(INIT_FUNC_SYMBOL);
                 init_func(&this->nucl, out);
                 if (*out)
                     loaded.emplace(*out, std::move(lib));
             } catch (std::system_error&) {
             }
-        }
     }
 
     void hydrolyze_enzyme(IObject** inout) noexcept final {

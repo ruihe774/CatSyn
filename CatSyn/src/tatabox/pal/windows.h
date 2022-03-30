@@ -60,7 +60,8 @@ class SharedLibrary {
     }
 
     ~SharedLibrary() {
-        FreeLibrary(mod);
+        if (mod)
+            FreeLibrary(mod);
     }
 
     static std::filesystem::path get_current_module_path() noexcept {
@@ -69,5 +70,11 @@ class SharedLibrary {
         GetModuleFileNameW(current_module, wbuf, sizeof(wbuf));
         buffer_size_check(GetLastError() != ERROR_INSUFFICIENT_BUFFER);
         return wbuf;
+    }
+
+    SharedLibrary(const SharedLibrary&) = delete;
+    SharedLibrary(SharedLibrary&& other) noexcept {
+        mod = other.mod;
+        other.mod = nullptr;
     }
 };

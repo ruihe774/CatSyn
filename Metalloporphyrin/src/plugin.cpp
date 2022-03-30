@@ -3,8 +3,6 @@
 
 #include <string.h>
 
-#include <Windows.h>
-
 #include <porphyrin.h>
 
 constexpr auto npos = catsyn::ITable::npos;
@@ -24,7 +22,7 @@ struct VSEnzyme final : public Object, public catsyn::IEnzyme {
         return funcs.get();
     }
 
-    explicit VSEnzyme(const char* path) noexcept : funcs(nullptr), path(path) {
+    explicit VSEnzyme(const char* path) noexcept : path(path) {
         core->nucl->get_factory()->create_table(0, funcs.put());
 #ifdef _WIN32
         std::replace(this->path.begin(), this->path.end(), '\\', '/');
@@ -58,7 +56,6 @@ VSPlugin* getPluginById(const char* identifier, VSCore*) noexcept {
         enzyme) {
         std::unique_lock<std::shared_mutex> lock(core->plugins_mutex);
         auto plugin = core->plugins.emplace(identifier, new VSPlugin{enzyme}).first->second.get();
-        core->ns_map.emplace(enzyme->get_namespace(), plugin);
         return plugin;
     } else
         return nullptr;
@@ -67,8 +64,9 @@ VSPlugin* getPluginById(const char* identifier, VSCore*) noexcept {
 VSPlugin* getPluginByNs(const char* ns, VSCore*) noexcept {
     {
         std::shared_lock<std::shared_mutex> lock(core->plugins_mutex);
-        if (auto it = core->ns_map.find(ns); it != core->ns_map.end())
-            return it->second;
+        for (auto&& item : core->plugins)
+            if (auto plugin = item.second.get(); strcmp(plugin->enzyme->get_namespace(), ns) == 0)
+                return plugin;
     }
     auto enzymes = core->nucl->get_enzymes();
     for (auto ref = enzymes->next(npos); ref != npos; ref = enzymes->next(ref)) {
@@ -76,7 +74,6 @@ VSPlugin* getPluginByNs(const char* ns, VSCore*) noexcept {
         if (strcmp(enzyme->get_namespace(), ns) == 0) {
             std::unique_lock<std::shared_mutex> lock(core->plugins_mutex);
             auto plugin = core->plugins.emplace(enzyme->get_identifier(), new VSPlugin{enzyme}).first->second.get();
-            core->ns_map.emplace(ns, plugin);
             return plugin;
         }
     }
@@ -145,55 +142,29 @@ const char* VSRibosome::get_identifier() const noexcept {
     return "club.yusyabu.metalloporphyrin.api3";
 }
 
-[[noreturn]] static void insufficient_buffer() {
-    throw std::runtime_error("insufficient buffer");
-}
-
-static wchar_t* u2w(const char* s) noexcept {
-    thread_local wchar_t wbuf[2048];
-    auto wlen = MultiByteToWideChar(CP_UTF8, 0, s, -1, wbuf, sizeof(wbuf));
-    if (wlen == 0)
-        insufficient_buffer();
-    return wbuf;
-}
-
 void VSRibosome::synthesize_enzyme(const char* token, catsyn::IObject** out) noexcept {
     *out = nullptr;
-    if (std::string_view{token}.starts_with("dll:")) {
-        auto lib = LoadLibraryExW(u2w(token + 4), nullptr,
-                                  LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
-        if (lib == nullptr) {
-            FreeLibrary(lib);
-            return;
+    if (std::string_view{token}.starts_with("dll:"))
+        try {
+            SharedLibrary lib{token + 4};
+            auto init_func = lib.get_function<std::remove_pointer_t<VSInitPlugin>>("VapourSynthPluginInit");
+            std::unique_ptr<VSPlugin> vsp(new VSPlugin{new VSEnzyme{token + 4}});
+            init_func(configurePlugin, registerFunction, vsp.get());
+            loaded.emplace(vsp->enzyme.get(), std::move(lib));
+            auto id = vsp->enzyme->get_identifier();
+            *out = vsp->enzyme.get();
+            (*out)->add_ref();
+            core->plugins.emplace(id, std::move(vsp));
+        } catch (std::system_error&) {
         }
-        auto init_func = reinterpret_cast<VSInitPlugin>(GetProcAddress(lib, "VapourSynthPluginInit"));
-        if (!init_func) {
-            FreeLibrary(lib);
-            return;
-        }
-        std::unique_ptr<VSPlugin> vsp(new VSPlugin{new VSEnzyme{token + 4}});
-        init_func(configurePlugin, registerFunction, vsp.get());
-        // loaded.emplace(vsp->enzyme.get(), std::move(lib));
-        auto ns = vsp->enzyme->get_namespace();
-        auto id = vsp->enzyme->get_identifier();
-        *out = vsp->enzyme.get();
-        (*out)->add_ref();
-        std::lock_guard<std::shared_mutex> guard(core->plugins_mutex);
-        core->ns_map.emplace(ns, core->plugins.emplace(id, std::move(vsp)).first->second.get());
-    }
-}
-
-[[noreturn]] static void hydrolyze_non_unique() {
-    throw std::runtime_error("attempt to hydrolyze an enzyme by non-unique reference");
 }
 
 void VSRibosome::hydrolyze_enzyme(catsyn::IObject** inout) noexcept {
-//    auto it = loaded.find(*inout);
-//    if (it != loaded.end()) {
-//        if (!(*inout)->is_unique())
-//            hydrolyze_non_unique();
-//        (*inout)->release();
-//        *inout = nullptr;
-//        loaded.erase(it);
-//    }
+    auto it = loaded.find(*inout);
+    if (it != loaded.end()) {
+        cond_check((*inout)->is_unique(), "attempt to hydrolyze an enzyme by non-unique reference");
+        (*inout)->release();
+        *inout = nullptr;
+        loaded.erase(it);
+    }
 }

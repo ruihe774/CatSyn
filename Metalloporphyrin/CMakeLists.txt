@@ -23,9 +23,9 @@ target_sources(metalloporphyrin PUBLIC
 target_include_directories(metalloporphyrin PUBLIC include)
 target_include_directories(metalloporphyrin PRIVATE src)
 target_include_directories(metalloporphyrin PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(metalloporphyrin PRIVATE allostery)
-target_link_libraries(metalloporphyrin PRIVATE fmt)
 target_link_libraries(metalloporphyrin PRIVATE Boost::container)
+target_link_libraries(metalloporphyrin PRIVATE allostery)
+target_link_libraries(metalloporphyrin PRIVATE tatabox)
 target_link_libraries(metalloporphyrin PRIVATE catsyn)
 
 configure_file(src/metalcfg.h.in metalcfg.h)

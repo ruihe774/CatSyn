@@ -10,6 +10,3 @@
 [submodule "snmalloc"]
 	path = snmalloc
 	url = https://github.com/microsoft/snmalloc.git
-[submodule "wil"]
-	path = wil
-	url = https://github.com/microsoft/wil.git
