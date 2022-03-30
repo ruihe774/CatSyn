@@ -64,9 +64,8 @@ class Frame final : public Object, virtual public IFrame, public Shuttle {
     std::array<size_t, max_plane_count> strides;
     cat_ptr<const ITable> props;
 
-    void check_idx(unsigned idx) const {
-        if (idx >= num_planes(fi.format))
-            throw std::out_of_range("plane index out of range");
+    void check_idx(unsigned idx) const noexcept {
+        cond_check(idx < num_planes(fi.format), "plane index out of range");
     }
 
   public:

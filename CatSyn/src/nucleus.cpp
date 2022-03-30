@@ -44,13 +44,8 @@ ITable* Nucleus::get_enzymes() noexcept {
     return enzymes.get();
 }
 
-[[noreturn]] static void throw_set_config_when_reacting() {
-    throw std::logic_error("changing config is not allowed during reaction");
-}
-
 void Nucleus::set_config(NucleusConfig cfg) noexcept {
-    if (is_reacting())
-        throw_set_config_when_reacting();
+    cond_check(!is_reacting(), "changing config is not allowed during reaction");
     config = create_default_config(cfg);
 }
 

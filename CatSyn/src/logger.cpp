@@ -16,7 +16,7 @@ static void log_out(LogLevel level, const char* msg) noexcept {
         break;
     }
 
-    format_to_err("{}\t{}\n", prompt, msg);
+    format_to_err("{} {}\n", prompt, msg);
 }
 
 static void log_worker(SCQueue<uintptr_t>& queue, ILogSink* const& sink) {
