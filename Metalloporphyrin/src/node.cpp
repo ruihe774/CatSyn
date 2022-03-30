@@ -79,7 +79,7 @@ struct VSFrameContext : catsyn::FrameData {
     std::variant<request_container, input_map> frames;
     const char* error;
     void* vs_frame_data;
-    explicit VSFrameContext(size_t frame_idx) noexcept : frame_idx(frame_idx), error(nullptr) {}
+    explicit VSFrameContext(size_t frame_idx) noexcept : frame_idx(frame_idx), error(nullptr), vs_frame_data(nullptr) {}
 };
 
 const VSFrameRef* getFrameFilter(int n, VSNodeRef* node, VSFrameContext* frameCtx) noexcept {

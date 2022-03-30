@@ -27,6 +27,31 @@ const std::type_info* VSFunc::get_out_type() const noexcept {
     return nullptr;
 }
 
+struct BypassFilter final : Object, virtual catsyn::IFilter {
+    catsyn::cat_ptr<const catsyn::ISubstrate> substrate;
+
+    catsyn::FilterFlags get_filter_flags() const noexcept final {
+        return catsyn::ffNormal;
+    }
+    catsyn::VideoInfo get_video_info() const noexcept final {
+        return substrate->get_video_info();
+    }
+    void get_frame_data(size_t frame_idx, catsyn::FrameData** frame_data) const noexcept final {
+        *frame_data = new catsyn::FrameData {
+            new catsyn::FrameSource{substrate.get(), frame_idx}, 1
+        };
+    }
+    void process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData** frame_data,
+                       const catsyn::IFrame** out) const final {
+        *out = input_frames[0];
+        (*out)->add_ref();
+    }
+    void drop_frame_data(catsyn::FrameData* frame_data) const noexcept final {
+        delete frame_data->dependencies;
+        delete frame_data;
+    }
+};
+
 void VSFunc::invoke(catsyn::ITable* args, const IObject** out) {
     auto arg_map = std::make_unique<VSMap>(args);
     catsyn::cat_ptr<catsyn::ITable> result_table;
@@ -39,9 +64,15 @@ void VSFunc::invoke(catsyn::ITable* args, const IObject** out) {
         throw std::runtime_error(std::string{err});
 
     auto result = std::move(result_map->table);
-    if (auto filter = dynamic_cast<const catsyn::IFilter*>(result->get(result->find("clip"), nullptr)); filter) {
+    auto clip = result->get(result->find("clip"), nullptr);
+    if (auto filter = dynamic_cast<const catsyn::IFilter*>(clip); filter) {
         *out = filter;
         filter->add_ref();
+    } else if (auto substrate = dynamic_cast<const catsyn::ISubstrate*>(clip); substrate) {
+        auto bypass = new BypassFilter;
+        bypass->substrate = substrate;
+        *out = bypass;
+        bypass->add_ref();
     } else
         *out = result.detach();
 }
