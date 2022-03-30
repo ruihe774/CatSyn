@@ -4,6 +4,12 @@
 
 #include <allostery.h>
 
+#ifdef _WIN32
+#define ALWAYS_INLINE __forceinline
+#else
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
+#endif
+
 void* operator new(size_t count) {
     auto ptr = operator new(count, std::nothrow);
     if (ptr) [[likely]]
@@ -99,7 +105,7 @@ size_t round_size(size_t size) noexcept {
     return snmalloc::round_size(size);
 }
 
-template<size_t size> __forceinline void copy_one(void* __restrict dst, const void* __restrict src) {
+template<size_t size> ALWAYS_INLINE void copy_one(void* __restrict dst, const void* __restrict src) {
     struct Block {
         char data[size];
     };
@@ -108,7 +114,7 @@ template<size_t size> __forceinline void copy_one(void* __restrict dst, const vo
     *d = *s;
 }
 
-template<size_t size, size_t word> __forceinline void small_copy(void* dst, const void* src) {
+template<size_t size, size_t word> ALWAYS_INLINE void small_copy(void* dst, const void* src) {
     if constexpr (size > 0) {
         if constexpr (size >= word) {
             copy_one<word>(dst, src);
@@ -119,7 +125,7 @@ template<size_t size, size_t word> __forceinline void small_copy(void* dst, cons
     }
 }
 
-template<size_t size, size_t word = size> __forceinline void small_copies(void* dst, const void* src, size_t len) {
+template<size_t size, size_t word = size> ALWAYS_INLINE void small_copies(void* dst, const void* src, size_t len) {
     if (len == size) {
         small_copy<size, word>(dst, src);
     }
@@ -128,11 +134,19 @@ template<size_t size, size_t word = size> __forceinline void small_copies(void* 
     }
 }
 
+ALWAYS_INLINE void movsb(unsigned char* dst, const unsigned char* src, size_t size) noexcept {
+#ifdef _WIN32
+    __movsb(dst, src, size);
+#else
+    asm volatile("rep movsb" : "+S"(src), "+D"(dst), "+c"(size) : : "memory");
+#endif
+}
+
 void round_copy(void* __restrict dst, const void* __restrict src, size_t size) noexcept {
     if (size < 32)
         small_copies<32>(dst, src, size);
     else if (size <= 256 * 1024)
-        __movsb(static_cast<unsigned char*>(dst), static_cast<const unsigned char*>(src), size);
+        movsb(static_cast<unsigned char*>(dst), static_cast<const unsigned char*>(src), size);
     else
         for (size_t i = 0; i < ((size + 31) / 32 + 7) / 8 * 8; ++i) {
             auto m = _mm256_load_si256((const __m256i*)(src) + i);

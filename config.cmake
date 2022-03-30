@@ -83,6 +83,7 @@ if(WIN32)
     endif()
 else()
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    link_libraries(pthread)
 endif()
 
 set(CMAKE_CONFIGURATION_TYPES "RelWithDebInfo;Debug")

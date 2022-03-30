@@ -3,7 +3,7 @@
 
 #include <unistd.h>
 
-thread_local char fmt_buf[4096] __attribute__((selectany));
+thread_local char fmt_buf[4096] __attribute__((weak));
 
 [[noreturn]] inline void unreachable() noexcept {
     __builtin_unreachable();
@@ -14,7 +14,7 @@ inline void throw_system_error() {
 }
 
 inline void write_err(const char* msg, size_t size) noexcept {
-    write(2, msg, size);
+    system_call_check(write(2, msg, size) == static_cast<ssize_t>(size));
 }
 
 template<typename T> void set_thread_priority(T& thread, int priority, bool allow_boost) noexcept {

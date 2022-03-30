@@ -4,6 +4,14 @@
 #include <exception>
 #include <queue>
 
+inline void yield() noexcept {
+#ifdef _WIN32
+    _mm_pause();
+#else
+    asm volatile inline("pause");
+#endif
+}
+
 struct StopRequested : std::exception {};
 
 template<typename T> class SCQueue {
@@ -62,7 +70,7 @@ template<typename T> class SCQueue {
             else
                 return std::nullopt;
         } else [[unlikely]] {
-            _mm_pause();
+            yield();
             goto reload;
         }
     }
@@ -119,7 +127,7 @@ class SpinLock {
             if (!lock.test_and_set(std::memory_order_acq_rel))
                 break;
             while (lock.test(std::memory_order_relaxed))
-                _mm_pause();
+                yield();
         }
     }
     void release() noexcept {

@@ -2,6 +2,7 @@
 
 #include <new>
 #include <type_traits>
+#include <version>
 
 #include <catsyn.h>
 
@@ -228,15 +229,20 @@ inline size_t width_bytes(FrameInfo fi, unsigned idx) noexcept {
 }
 
 inline size_t default_stride(FrameInfo fi, unsigned idx) noexcept {
-    auto align = std::hardware_destructive_interference_size;
+    auto align =
+#ifdef __cpp_lib_hardware_interference_size
+        std::hardware_destructive_interference_size
+#else
+        64
+#endif
+        ;
     auto stride = (width_bytes(fi, idx) + align - 1u) / align * align;
     return stride;
 }
 
 namespace detail {
 
-template<typename F>
-class CallbackWrapper final : virtual public ICallback {
+template<typename F> class CallbackWrapper final : virtual public ICallback {
     F f;
 
   public:
@@ -251,10 +257,9 @@ class CallbackWrapper final : virtual public ICallback {
     }
 };
 
-}
+} // namespace detail
 
-template<typename F>
-cat_ptr<ICallback> wrap_callback(F&& f) noexcept {
+template<typename F> cat_ptr<ICallback> wrap_callback(F&& f) noexcept {
     return wrap_cat_ptr(new detail::CallbackWrapper{std::move(f)});
 }
 
