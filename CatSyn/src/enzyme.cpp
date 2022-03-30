@@ -147,7 +147,8 @@ void Nucleus::synthesize_enzymes() noexcept {
                     if (!ezs.emplace(id, enzyme).second) {
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: enzyme '{}' cannot be registered multiple times", id));
-                        ribosome->hydrolyze_enzyme(reinterpret_cast<IObject**>(enzyme.addressof()));
+                        enzyme.reset();
+                        ribosome->hydrolyze_enzyme(obj.addressof());
                     }
                 } else if (auto rbs = obj.try_query<IRibosome>(); rbs) {
                     auto id = rbs->get_identifier();
@@ -155,7 +156,8 @@ void Nucleus::synthesize_enzymes() noexcept {
                     if (ref != ITable::npos) {
                         logger.log(LogLevel::WARNING,
                                    format_c("Nucleus: ribosome '{}' cannot be registered multiple times", id));
-                        ribosome->hydrolyze_enzyme(reinterpret_cast<IObject**>(rbs.addressof()));
+                        rbs.reset();
+                        ribosome->hydrolyze_enzyme(obj.addressof());
                     } else
                         ribosomes->set(ref, rbs.get(), id);
                 } else
