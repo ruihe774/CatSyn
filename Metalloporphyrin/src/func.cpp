@@ -2,6 +2,8 @@
 
 #include <porphyrin.h>
 
+constexpr auto npos = catsyn::ITable::npos;
+
 VSFunc::VSFunc(VSPublicFunction func, void* userData, VSFreeFuncData freer,
                std::optional<std::vector<catsyn::ArgSpec>> specs) noexcept
     : func(func), userData(userData), freer(freer), specs(std::move(specs)) {}
@@ -54,10 +56,16 @@ VSFuncRef* cloneFuncRef(VSFuncRef* f) noexcept {
 
 void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore*, const VSAPI* vsapi) noexcept {
     auto& f = func->func;
+    auto arg_table = catsyn::create_arg_table(core->nucl->get_factory(), f.get());
+    for (size_t ref = in->table->next(npos); ref != npos; ref = in->table->next(ref)) {
+        const char* key = nullptr;
+        auto val = in->table->get(ref, &key);
+        arg_table->set(arg_table->find(key), val, key);
+    }
     catsyn::cat_ptr<const catsyn::IObject> result;
 
     try {
-        f->invoke(in->table.clone().get(), result.put_const());
+        f->invoke(arg_table.get(), result.put_const());
     } catch (std::exception& exc) {
         setError(out, exc.what());
         return;
@@ -67,10 +75,10 @@ void callFunc(VSFuncRef* func, const VSMap* in, VSMap* out, VSCore*, const VSAPI
         out->get_mut()->set(out->table->find("clip"), core->nucl->register_filter(filter.get()), "clip");
     } else {
         auto table = result.query<const catsyn::ITable>();
-        for (size_t ref = table->next(catsyn::ITable::npos); ref != catsyn::ITable::npos; ref = table->next(ref)) {
+        for (size_t ref = table->next(npos); ref != npos; ref = table->next(ref)) {
             const char* key = nullptr;
             auto val = table->get(ref, &key);
-            out->get_mut()->set(catsyn::ITable::npos, val, key);
+            out->get_mut()->set(npos, val, key);
         }
     }
 }

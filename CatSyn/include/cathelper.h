@@ -263,4 +263,18 @@ template<typename F> cat_ptr<ICallback> wrap_callback(F&& f) noexcept {
     return wrap_cat_ptr(new detail::CallbackWrapper{std::move(f)});
 }
 
+inline cat_ptr<ITable> create_arg_table(IFactory* factory, const ArgSpec* specs, size_t arg_count) noexcept {
+    cat_ptr<ITable> table;
+    factory->create_table(arg_count, table.put());
+    for (size_t i = 0; i < arg_count; ++i)
+        table->set(i, nullptr, specs[i].name);
+    return table;
+}
+
+inline cat_ptr<ITable> create_arg_table(IFactory* factory, IFunction* func) noexcept {
+    size_t len;
+    auto specs = func->get_arg_specs(&len);
+    return create_arg_table(factory, specs, len);
+}
+
 } // namespace catsyn

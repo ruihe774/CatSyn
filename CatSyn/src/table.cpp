@@ -21,7 +21,7 @@ void Table::set(size_t ref, const IObject* obj, const char* key) noexcept {
     if (ref >= vec.size())
         vec.resize(ref + 1);
     auto&& item = vec[ref];
-    if (key)
+    if (key && (!item.first || item.first.value() != key))
         item.first = key;
     item.second = obj;
 }
