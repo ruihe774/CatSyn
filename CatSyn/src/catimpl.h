@@ -128,11 +128,11 @@ struct CallbackTask {
     std::function<void()> callback;
 };
 
-NucleusConfig create_default_config(NucleusConfig tmpl = {}) noexcept;
+NucleusConfig create_config(NucleusConfig tmpl = {}) noexcept;
 
 class Nucleus final : public Object, virtual public INucleus, virtual public IFactory {
   public:
-    NucleusConfig config{create_default_config()};
+    NucleusConfig config{create_config()};
 
     Logger logger;
 

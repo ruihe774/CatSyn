@@ -1,6 +1,6 @@
 #include <catimpl.h>
 
-NucleusConfig create_default_config(NucleusConfig tmpl) noexcept {
+NucleusConfig create_config(NucleusConfig tmpl) noexcept {
     tmpl.thread_count = tmpl.thread_count ? tmpl.thread_count : std::thread::hardware_concurrency();
     tmpl.mem_hint_mb = tmpl.mem_hint_mb ? tmpl.mem_hint_mb : 4096;
     return tmpl;
@@ -46,7 +46,7 @@ ITable* Nucleus::get_enzymes() noexcept {
 
 void Nucleus::set_config(NucleusConfig cfg) noexcept {
     cond_check(!is_reacting(), "changing config is not allowed during reaction");
-    config = create_default_config(cfg);
+    config = create_config(cfg);
 }
 
 NucleusConfig Nucleus::get_config() const noexcept {
