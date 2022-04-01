@@ -3,6 +3,7 @@
 #include <functional>
 #include <map>
 #include <optional>
+#include <string>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -15,7 +16,7 @@
 
 #include <catcfg.h>
 #include <cathelper.h>
-#include <catsyn.h>
+#include <catsyn_1.h>
 
 #include <queue.h>
 
@@ -130,7 +131,7 @@ struct CallbackTask {
 
 NucleusConfig create_config(NucleusConfig tmpl = {}) noexcept;
 
-class Nucleus final : public Object, virtual public INucleus, virtual public IFactory {
+class Nucleus final : public Object, virtual public INucleus, virtual public IFactory1 {
   public:
     NucleusConfig config{create_config()};
 
@@ -167,6 +168,7 @@ class Nucleus final : public Object, virtual public INucleus, virtual public IFa
 
     void create_dll_enzyme_finder(const char* path, IEnzymeFinder** out) noexcept final;
     void create_catsyn_v1_ribosome(IRibosome** out) noexcept final;
+    void create_pathway(IPathway** out) noexcept final;
 
     void synthesize_enzymes() noexcept final;
     ITable* get_enzymes() noexcept final;

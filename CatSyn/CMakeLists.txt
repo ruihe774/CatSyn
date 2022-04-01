@@ -39,12 +39,14 @@ add_library(catsyn SHARED
     src/frame.cpp
     src/logger.cpp
     src/nucleus.cpp
+    src/pathway.cpp
     src/substrate.cpp
     src/table.cpp
 )
 target_sources(catsyn PUBLIC
     include/cathelper.h
     include/catsyn.h
+    include/catsyn_1.h
 )
 target_include_directories(catsyn PUBLIC include)
 target_include_directories(catsyn PRIVATE src)
