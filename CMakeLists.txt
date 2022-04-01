@@ -4,6 +4,7 @@ project(Nekomonogatari
     LANGUAGES C CXX
     VERSION 1.0.0
     DESCRIPTION "Monorepo for catalysts"
+    HOMEPAGE_URL https://github.com/Yusyabu/Nekomonogatari
 )
 
 include(config.cmake)
@@ -24,3 +25,5 @@ add_subdirectory(Metalloporphyrin)
 add_subdirectory(zimg EXCLUDE_FROM_ALL)
 
 add_subdirectory(VapStd)
+
+add_subdirectory(moonjit)
