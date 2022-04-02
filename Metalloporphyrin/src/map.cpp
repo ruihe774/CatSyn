@@ -265,6 +265,8 @@ template<typename T> int map_set(VSMap* map, const char* key, const T* value, in
 
 int propSetData(VSMap* map, const char* key, const char* data, int size, int append) noexcept {
     catsyn::cat_ptr<catsyn::IBytes> bytes;
+    if (size < 0)
+        size = static_cast<int>(strlen(data));
     core->nucl->get_factory()->create_bytes(nullptr, size + 1, bytes.put());
     auto ptr = bytes->data();
     memcpy(ptr, data, size);
