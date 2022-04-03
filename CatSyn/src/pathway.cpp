@@ -195,6 +195,13 @@ class Pathway final : public Object, virtual public IPathway, public Shuttle {
     }
 
     explicit Pathway(Nucleus& nucl) noexcept : Shuttle(nucl) {}
+
+    ~Pathway() final {
+        for (auto&& item : pool) {
+            cond_check(item.second->is_unique(), "all substrates created by this pathway are not released");
+            nucl.unregister_filter(item.second->filter.get());
+        }
+    }
 };
 
 void Nucleus::create_pathway(IPathway** out) noexcept {
