@@ -27,3 +27,5 @@ add_subdirectory(zimg EXCLUDE_FROM_ALL)
 add_subdirectory(VapStd)
 
 add_subdirectory(moonjit)
+
+add_subdirectory(Melatonin)
