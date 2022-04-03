@@ -13,3 +13,6 @@
 [submodule "moonjit"]
 	path = moonjit
 	url = https://github.com/AmusementClub/moonjit.git
+[submodule "wil"]
+	path = wil
+	url = https://github.com/Microsoft/wil.git
