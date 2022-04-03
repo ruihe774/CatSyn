@@ -10,3 +10,4 @@ add_library(melatonin SHARED
     src/melatonin.cpp
 )
 target_link_libraries(melatonin PRIVATE luajit)
+target_link_libraries(melatonin PRIVATE catsyn)
