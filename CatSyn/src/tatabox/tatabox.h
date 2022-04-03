@@ -67,6 +67,8 @@ template<typename T> void set_thread_priority(T& thread, int priority, bool allo
 
 class SharedLibrary;
 
+inline void* runtime_dynamic_cast(void* src, const std::type_info& src_type, const std::type_info& dst_type) noexcept;
+
 #ifdef _WIN32
 #include <pal/windows.h>
 #else

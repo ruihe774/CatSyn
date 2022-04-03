@@ -1,44 +1,27 @@
-#include <string_view>
+#include <cstring>
+#include <stdexcept>
 
 #include <catimpl.h>
 
-#ifdef _WIN32
-#ifdef __clang__
-extern "C" void* __RTDynamicCast(void* inptr, long VfDelta, void* SrcType, void* TargetType, int isReference);
-#endif
-static void* runtime_dynamic_cast(const std::type_info& dst_type, IObject* src) {
-    // XXX: I don't know this is correct or not
-    return __RTDynamicCast(src, 0, (void*)&typeid(IObject), (void*)&dst_type, 0);
-}
-#endif
-
-static bool type_check(const std::type_info& dst_type, IObject* src, bool allow_anta = false) {
-    if (runtime_dynamic_cast(dst_type, src))
-        return true;
-    if (allow_anta && dst_type == typeid(ISubstrate) && dynamic_cast<IAntagonist*>(src))
-        return true;
-    return false;
+static bool type_check(IObject* obj, const std::type_info& dst_type) noexcept {
+    return runtime_dynamic_cast(obj, typeid(IObject), dst_type);
 }
 
-static void check_args(const ArgSpec* specs, size_t arg_count, const ITable* args, bool allow_anta = false) {
-    thread_local char buf[1024];
+template<typename... Args> [[noreturn]] void throw_invalid_argument(fmt::format_string<Args...> fmt, Args&&... args) {
+    throw std::invalid_argument(format_c(std::move(fmt), std::forward<Args>(args)...));
+}
+
+static void check_args(const ArgSpec* specs, size_t arg_count, const ITable* args) {
     for (size_t ref = 0; ref < arg_count; ++ref) {
         const char* key;
         auto val = args->get(ref, &key);
         auto&& spec = specs[ref];
-        if (!key) {
-            std::snprintf(buf, sizeof(buf), "missing argument at %llu", ref);
-            throw std::invalid_argument(buf);
-        }
-        if (std::strcmp(spec.name, key) != 0) {
-            std::snprintf(buf, sizeof(buf), "invalid argument name at %llu (expected '%s', got '%s')", ref, spec.name,
-                          key);
-            throw std::invalid_argument(buf);
-        }
-        if (spec.required && !val) {
-            std::snprintf(buf, sizeof(buf), "missing required argument '%s'", spec.name);
-            throw std::invalid_argument(buf);
-        }
+        if (!key)
+            throw_invalid_argument("missing argument at {}", ref);
+        if (std::strcmp(spec.name, key) != 0)
+            throw_invalid_argument("invalid argument name at {} (expected '{}', got '{}')", ref, spec.name, key);
+        if (spec.required && !val)
+            throw_invalid_argument("missing required argument '{}'", spec.name);
         if (auto obj = const_cast<IObject*>(val); obj && spec.type) {
             if (*spec.type == typeid(int64_t) || *spec.type == typeid(double)) {
                 if (auto arr = dynamic_cast<INumeric*>(obj); arr) {
@@ -55,41 +38,90 @@ static void check_args(const ArgSpec* specs, size_t arg_count, const ITable* arg
                         auto elem = const_cast<IObject*>(arr->get(i, nullptr));
                         if (!elem)
                             break;
-                        if (!type_check(*spec.type, elem))
+                        if (!type_check(elem, *spec.type))
                             goto invalid_type;
                     }
                 } else
                     goto invalid_type;
-            } else if (!type_check(*spec.type, obj))
+            } else if (!type_check(obj, *spec.type))
                 goto invalid_type;
         }
         continue;
     invalid_type:
-        std::snprintf(buf, sizeof(buf), "invalid type for argument '%s' (expected '%s%s' or derived)", spec.name,
-                      spec.type->name(), spec.array ? "[]" : "");
-        throw std::invalid_argument(buf);
+        throw_invalid_argument("invalid type for argument '{}' (expected '{}{}' or derived)", spec.name,
+                               spec.type->name(), spec.array ? "[]" : "");
     }
 }
 
-static void check_args(IFunction* func, const ITable* args, bool allow_anta = false) {
+static void check_args(IFunction* func, const ITable* args) {
     size_t len = 0;
     auto specs = func->get_arg_specs(&len);
-    check_args(specs, len, args, allow_anta);
+    check_args(specs, len, args);
 }
 
-class Antagonist final : public Object, virtual public IAntagonist {
-  public:
-    const std::string enzyme_id;
-    const std::string func_name;
-    const cat_ptr<const ITable> args;
+struct StepDesc {
+    std::string enzyme_id;
+    std::string func_name;
+    cat_ptr<ITable> args;
+};
 
-    Antagonist(std::string enzyme_id, std::string func_name, cat_ptr<const ITable> args) noexcept
-        : enzyme_id(std::move(enzyme_id)), func_name(std::move(func_name)), args(std::move(args)) {}
+class StepDescLess {
+    static int cmp_vi(const ISubstrate* l, const ISubstrate* r) noexcept {
+        auto lvi = l->get_video_info();
+        auto rvi = r->get_video_info();
+        return std::memcmp(&lvi, &rvi, sizeof(VideoInfo));
+    }
+
+    static int cmp_bytes(const IBytes* l, const IBytes* r) noexcept {
+        auto lsize = l->size();
+        auto rsize = r->size();
+        if (auto cmp = lsize <=> rsize; cmp != 0)
+            return cmp < 0 ? -1 : 1;
+        return std::memcmp(l->data(), r->data(), lsize);
+    }
+
+    static int cmp_table(const ITable* l, const ITable* r) noexcept {
+        for (size_t ref = 0;; ++ref) {
+            auto lval = l->get(ref, nullptr);
+            auto rval = r->get(ref, nullptr);
+            if (auto lnul = lval == nullptr, rnul = rval == nullptr; lnul && rnul)
+                return 0;
+            else if (lnul || rnul)
+                return lnul ? -1 : 1;
+            if (auto ltab = dynamic_cast<const ITable*>(lval), rtab = dynamic_cast<const ITable*>(rval); ltab || rtab) {
+                if (ltab == nullptr || rtab == nullptr)
+                    return ltab ? 1 : -1;
+                if (auto cmp = cmp_table(ltab, rtab); cmp != 0)
+                    return cmp;
+            } else if (auto ldat = dynamic_cast<const IBytes*>(lval), rdat = dynamic_cast<const IBytes*>(rval);
+                       ldat || rdat) {
+                if (ldat == nullptr || rdat == nullptr)
+                    return ldat ? 1 : -1;
+                if (auto cmp = cmp_bytes(ldat, rdat); cmp != 0)
+                    return cmp;
+            } else if (auto lsub = dynamic_cast<const ISubstrate*>(lval), rsub = dynamic_cast<const ISubstrate*>(rval);
+                       lsub || rsub) {
+                if (lsub == nullptr || rsub == nullptr)
+                    return lsub ? 1 : -1;
+                if (auto cmp = cmp_vi(lsub, rsub); cmp != 0)
+                    return cmp;
+            } else if (auto cmp = lval <=> rval; cmp != 0)
+                return cmp < 0 ? -1 : 1;
+        }
+    }
+
+  public:
+    bool operator()(const StepDesc& l, const StepDesc& r) const noexcept {
+        if (auto cmp = l.enzyme_id <=> r.enzyme_id; cmp != 0)
+            return cmp < 0;
+        if (auto cmp = l.func_name <=> r.func_name; cmp != 0)
+            return cmp < 0;
+        return cmp_table(l.args.get(), r.args.get()) < 0;
+    }
 };
 
 class Pathway final : public Object, virtual public IPathway, public Shuttle {
-    std::map<int, cat_ptr<Antagonist>> slots;
-    std::map<Antagonist*, cat_ptr<Substrate>> substrates;
+    std::multimap<const StepDesc, Substrate*, StepDescLess> pool;
 
     IFunction* get_func(const char* enzyme_id, const char* func_name) noexcept {
         auto enzymes = this->nucl.enzymes.get();
@@ -99,72 +131,70 @@ class Pathway final : public Object, virtual public IPathway, public Shuttle {
         return const_cast<IFunction*>(func);
     }
 
-    Antagonist* downcast_anta(const IObject* obj) {
-        return &dynamic_cast<Antagonist&>(*const_cast<IObject*>(obj));
+    static void update_sources(ITable* dst, const ITable* src) noexcept {
+        for (size_t ref = 0;; ++ref) {
+            auto dval = dst->get(ref, nullptr);
+            auto sval = src->get(ref, nullptr);
+            if (dval == nullptr)
+                return;
+            if (auto dtab = dynamic_cast<const ITable*>(dval), stab = dynamic_cast<const ITable*>(sval); dtab)
+                update_sources(const_cast<ITable*>(dtab), stab);
+            else if (auto dsub = dynamic_cast<const Substrate*>(dval), ssub = dynamic_cast<const Substrate*>(sval);
+                     dsub)
+                const_cast<Substrate*>(dsub)->filter = ssub->filter;
+        }
     }
 
-    ISubstrate* make_substrate(Antagonist* anta) {
-        if (auto it = substrates.find(anta); it != substrates.end())
-            return it->second.get();
-        auto func = get_func(anta->enzyme_id.c_str(), anta->func_name.c_str());
-        size_t len = 0;
-        auto specs = func->get_arg_specs(&len);
-        cat_ptr<ITable> finalized_args;
-        nucl.create_table(len, finalized_args.put());
-        for (size_t i = 0; i < len; ++i) {
+    cat_ptr<ITable> create_shim(const ITable* args) const noexcept {
+        cat_ptr<ITable> r;
+        nucl.create_table(0, r.put());
+        for (size_t ref = 0;; ++ref) {
             const char* key;
-            auto val = anta->args->get(i, &key);
-            if (*specs[i].type == typeid(ISubstrate)) {
-                if (specs[i].array) {
-                    auto arr = dynamic_cast<const ITable*>(val);
-                    cat_ptr<ITable> finalized_arr;
-                    auto size = arr->size();
-                    nucl.create_table(size, finalized_arr.put());
-                    for (size_t j = 0; j < size; ++j)
-                        finalized_arr->set(j, make_substrate(downcast_anta(arr->get(j, nullptr))), key);
-                    finalized_args->set(i, finalized_arr.get(), key);
-                } else
-                    finalized_args->set(i, make_substrate(downcast_anta(val)), key);
-            } else
-                finalized_args->set(i, val, key);
+            auto val = args->get(ref, &key);
+            if (val == nullptr)
+                return r;
+            if (auto tab = dynamic_cast<const ITable*>(val); tab)
+                r->set(ref, create_shim(tab).get(), key);
+            else if (auto sub = dynamic_cast<const Substrate*>(val); sub)
+                r->set(ref, new Substrate{nucl, sub->filter}, key);
+            else
+                r->set(ref, val, key);
         }
-        cat_ptr<const IObject> out;
-        func->invoke(finalized_args.get(), out.put_const());
-        return substrates.emplace(anta, out.query<const Substrate>().clone()).first->second.get();
     }
 
   public:
-    void add_step(const char* enzyme_id, const char* func_name, const ITable* args, IAntagonist** out) final {
-        check_args(get_func(enzyme_id, func_name), args, true);
-        create_instance<Antagonist>(out, enzyme_id, func_name, wrap_cat_ptr(args));
+    void clone(IObject** out) const noexcept final {
+        not_implemented();
     }
 
-    void set_slot(int id, const IAntagonist* anta) noexcept final {
-        if (anta)
-            slots.insert_or_assign(id, wrap_cat_ptr(&dynamic_cast<Antagonist&>(*const_cast<IAntagonist*>(anta))));
-        else
-            slots.erase(id);
-    }
-
-    IAntagonist* get_slot(int id) const noexcept final {
-        if (auto it = slots.find(id); it != slots.end())
-            return it->second.get();
-        else
-            return nullptr;
-    }
-
-    ISubstrate* make_substrate(const IAntagonist* anta) final {
-        return make_substrate(downcast_anta(anta));
+    void add_step(const char* enzyme_id, const char* func_name, const ITable* args, ISubstrate** out) final {
+        auto func = get_func(enzyme_id, func_name);
+        check_args(func, args);
+        StepDesc desc{
+            enzyme_id,
+            func_name,
+            wrap_cat_ptr(const_cast<ITable*>(args)),
+        };
+        auto [bg, ed] = pool.equal_range(desc);
+        for (auto it = bg; it != ed; ++it)
+            if (auto substrate = it->second; substrate->is_unique()) {
+                update_sources(it->first.args.get(), args);
+                *out = substrate;
+                substrate->add_ref();
+                return;
+            }
+        auto shim = create_shim(args);
+        cat_ptr<const IObject> obj;
+        func->invoke(shim.get(), obj.put_const());
+        auto filter = obj.query<const IFilter>();
+        auto substrate = nucl.register_filter(filter.get());
+        desc.args = std::move(shim);
+        pool.emplace(std::move(desc), dynamic_cast<Substrate*>(substrate));
+        *out = substrate;
+        substrate->add_ref();
     }
 
     explicit Pathway(Nucleus& nucl) noexcept : Shuttle(nucl) {}
-
-    explicit Pathway(const Pathway& other) noexcept
-        : Shuttle(other.nucl), slots(other.slots), substrates(other.substrates) {}
-
-    void clone(IObject** out) const noexcept {
-        create_instance<Pathway>(out, *this);
-    }
 };
 
 void Nucleus::create_pathway(IPathway** out) noexcept {

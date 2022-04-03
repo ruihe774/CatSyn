@@ -78,3 +78,11 @@ class SharedLibrary {
         other.mod = nullptr;
     }
 };
+
+#ifdef __clang__
+extern "C" void* __RTDynamicCast(void* inptr, long VfDelta, void* SrcType, void* TargetType, int isReference);
+#endif
+
+inline void* runtime_dynamic_cast(void* src, const std::type_info& src_type, const std::type_info& dst_type) noexcept {
+    return __RTDynamicCast(src, 0, (void*)&src_type, (void*)&dst_type, 0);
+}
