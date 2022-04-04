@@ -13,6 +13,14 @@ include(install_pdb.cmake)
 
 set(NEKO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 
+set(C_FLAGS_BACKUP "${CMAKE_C_FLAGS}")
+set(CXX_FLAGS_BACKUP "${CMAKE_CXX_FLAGS}")
+
+if(CLANG)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Xclang -fexternc-nounwind")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -fexternc-nounwind")
+endif()
+
 add_subdirectory(snmalloc EXCLUDE_FROM_ALL)
 target_compile_definitions(snmalloc_lib INTERFACE SNMALLOC_USE_LARGE_CHUNKS)
 
@@ -20,20 +28,23 @@ add_subdirectory(boost EXCLUDE_FROM_ALL)
 
 add_subdirectory(fmt EXCLUDE_FROM_ALL)
 
+set(WIL_BUILD_PACKAGING OFF CACHE BOOL "")
+set(WIL_BUILD_TESTS OFF CACHE BOOL "")
+add_subdirectory(wil EXCLUDE_FROM_ALL)
+
+add_subdirectory(zimg EXCLUDE_FROM_ALL)
+
 add_subdirectory(CatSyn)
 
 add_subdirectory(Metalloporphyrin)
 
-add_subdirectory(zimg EXCLUDE_FROM_ALL)
-
 add_subdirectory(VapStd)
+
+set(CMAKE_C_FLAGS "${C_FLAGS_BACKUP}")
+set(CMAKE_CXX_FLAGS "${CXX_FLAGS_BACKUP}")
 
 add_subdirectory(moonjit)
 
 add_subdirectory(Melatonin)
-
-set(WIL_BUILD_PACKAGING OFF CACHE BOOL "")
-set(WIL_BUILD_TESTS OFF CACHE BOOL "")
-add_subdirectory(wil EXCLUDE_FROM_ALL)
 
 add_subdirectory(mskfunc)
