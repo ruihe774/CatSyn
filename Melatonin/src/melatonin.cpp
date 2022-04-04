@@ -27,6 +27,8 @@ template<class> inline constexpr bool dependent_false_v = false;
 template<typename T> static void push(lua_State* L, T val) {
     if constexpr (std::is_enum_v<T>)
         push(L, static_cast<std::underlying_type_t<T>>(val));
+    else if constexpr (std::is_same_v<T, bool>)
+        lua_pushboolean(L, val);
     else if constexpr (std::is_integral_v<T>)
         lua_pushinteger(L, static_cast<lua_Integer>(val));
     else if constexpr (std::is_floating_point_v<T>)
@@ -146,6 +148,11 @@ static int make_ff(lua_State* L) {
     return 1;
 }
 
+static int ff_eq(lua_State* L) {
+    push(L, pull<FrameFormat>(L, 1).id == pull<FrameFormat>(L, 2).id);
+    return 1;
+}
+
 struct NamedFormat {
     const char* name;
     FrameFormat format;
@@ -172,7 +179,9 @@ static const NamedFormat predefined_formats[] = {
 
 static void init_format_lib(lua_State* L) {
     luaL_newmetatable(L, MAKE_TNAME(FrameFormat));
+    set(L, ff_eq, "__eq");
     lua_pop(L, 1);
+
     for (auto pd : predefined_formats)
         set(L, pd.format, pd.name);
 
