@@ -43,6 +43,8 @@ add_subdirectory(VapStd)
 set(CMAKE_C_FLAGS "${C_FLAGS_BACKUP}")
 set(CMAKE_CXX_FLAGS "${CXX_FLAGS_BACKUP}")
 
+set(LUAJIT_ENABLE_LUA52COMPAT ON CACHE BOOL "Enable Lua 5.2 features that might break")
+set(LUAJIT_DISABLE_JIT ON CACHE BOOL "Disable the JIT compiler")
 add_subdirectory(moonjit)
 
 add_subdirectory(Melatonin)
