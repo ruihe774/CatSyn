@@ -1,12 +1,11 @@
-#include <type_traits>
 #include <optional>
-#include <tuple>
 #include <string_view>
+#include <type_traits>
 
 #include <lua.hpp>
 
-#include <catsyn_1.h>
 #include <cathelper.h>
+#include <catsyn_1.h>
 #include <tatabox.h>
 
 using namespace catsyn;
@@ -21,11 +20,11 @@ template<typename... Args>
 
 static int format_field_replace(lua_State* L);
 
-template<typename T>
-static void set(lua_State* L, T val, const char* key, int idx = -2);
+template<typename T> static void set(lua_State* L, T val, const char* key, int idx = -1);
 
-template<typename T>
-static void push(lua_State* L, T val) {
+template<class> inline constexpr bool dependent_false_v = false;
+
+template<typename T> static void push(lua_State* L, T val) {
     if constexpr (std::is_enum_v<T>)
         push(L, static_cast<std::underlying_type_t<T>>(val));
     else if constexpr (std::is_integral_v<T>)
@@ -46,17 +45,17 @@ static void push(lua_State* L, T val) {
         set(L, val.detail.height_subsampling, "height_subsampling");
         set(L, num_planes(val), "num_planes");
         set(L, format_field_replace, "replace");
-    }
+    } else
+        static_assert(dependent_false_v<T>, "type not supported");
 }
 
-template<typename T>
-static void set(lua_State* L, T val, const char* key, int idx) {
+template<typename T> static void set(lua_State* L, T val, const char* key, int idx) {
+    idx = lua_absindex(L, idx);
     push(L, val);
     lua_setfield(L, idx, key);
 }
 
-template<typename T>
-static T pull(lua_State* L, int idx = -1) {
+template<typename T> static T pull(lua_State* L, int idx = -1) {
     if constexpr (std::is_enum_v<T>)
         return static_cast<T>(pull<std::underlying_type_t<T>>(L, idx));
     else if constexpr (std::is_integral_v<T>) {
@@ -83,11 +82,11 @@ static T pull(lua_State* L, int idx = -1) {
         size_t len;
         auto s = lua_tolstring(L, idx, &len);
         return {s, len};
-    }
+    } else
+        static_assert(dependent_false_v<T>, "type not supported");
 }
 
-template<typename T>
-static std::optional<T> get(lua_State* L, const char* key, int idx) {
+template<typename T> static std::optional<T> get(lua_State* L, const char* key, int idx = -1) {
     lua_getfield(L, idx, key);
     if (lua_isnil(L, -1)) {
         lua_pop(L, 1);
@@ -102,21 +101,47 @@ static int format_field_replace(lua_State* L) {
     auto ff = pull<FrameFormat>(L, 1);
     lua_pushnil(L);
     while (lua_next(L, 2)) {
-        auto key = pull<std::string_view>(L, -2);
-        if (key == "color_family" || key == "1")
+        std::string_view key;
+        int idx = -1;
+        if (lua_isnumber(L, -2))
+            idx = pull<int>(L, -2);
+        else
+            key = pull<std::string_view>(L, -2);
+        if (key == "color_family" || idx == 1)
             ff.detail.color_family = pull<ColorFamily>(L);
-        else if (key == "sample_type" || key == "2")
+        else if (key == "sample_type" || idx == 2)
             ff.detail.sample_type = pull<SampleType>(L);
-        else if (key == "bits_per_sample" || key == "3")
+        else if (key == "bits_per_sample" || idx == 3)
             ff.detail.bits_per_sample = pull<unsigned>(L);
-        else if (key == "width_subsampling" || key == "4")
+        else if (key == "width_subsampling" || idx == 4)
             ff.detail.width_subsampling = pull<unsigned>(L);
-        else if (key == "height_subsampling" || key == "5")
+        else if (key == "height_subsampling" || idx == 5)
             ff.detail.height_subsampling = pull<unsigned>(L);
         else
             error(L, "unknown parameter '{}'", key);
         lua_pop(L, 1);
     }
+    push(L, ff);
+    return 1;
+}
+
+static int make_ff(lua_State* L) {
+    FrameFormat ff;
+    ff.id = static_cast<uint32_t>(-1);
+    push(L, ff);
+    lua_insert(L, 1);
+    format_field_replace(L);
+    ff = pull<FrameFormat>(L);
+    if (static_cast<unsigned>(ff.detail.color_family) == 0xFu)
+        error(L, "missing parameter 'color_family'");
+    if (static_cast<unsigned>(ff.detail.sample_type) == 0xFu)
+        error(L, "missing parameter 'sample_type'");
+    if (ff.detail.bits_per_sample == 0xFFu)
+        error(L, "missing parameter 'bits_per_sample'");
+    if (ff.detail.width_subsampling == 0xFFu)
+        error(L, "missing parameter 'width_subsampling'");
+    if (ff.detail.height_subsampling == 0xFFu)
+        error(L, "missing parameter 'height_subsampling'");
     push(L, ff);
     return 1;
 }
@@ -145,15 +170,23 @@ static const NamedFormat predefined_formats[] = {
     {"RGBS", make_frame_format(ColorFamily::RGB, SampleType::Float, 32, 0, 0)},
 };
 
-static void register_formats(lua_State* L) {
+static void init_format_lib(lua_State* L) {
     luaL_newmetatable(L, MAKE_TNAME(FrameFormat));
     lua_pop(L, 1);
     for (auto pd : predefined_formats)
         set(L, pd.format, pd.name);
+
+    set(L, ColorFamily::YUV, "YUV");
+    set(L, ColorFamily::RGB, "RGB");
+    set(L, ColorFamily::Gray, "GRAY");
+    set(L, SampleType::Integer, "INTEGER");
+    set(L, SampleType::Float, "FLOAT");
+
+    set(L, make_ff, "make_frame_format");
 }
 
 extern "C" CAT_EXPORT int luaopen_melatonin(lua_State* L) {
     lua_newtable(L);
-    register_formats(L);
+    init_format_lib(L);
     return 1;
 }
