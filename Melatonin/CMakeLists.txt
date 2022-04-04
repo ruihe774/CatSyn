@@ -11,3 +11,4 @@ add_library(melatonin SHARED
 )
 target_link_libraries(melatonin PRIVATE luajit)
 target_link_libraries(melatonin PRIVATE catsyn)
+target_link_libraries(melatonin PRIVATE tatabox)

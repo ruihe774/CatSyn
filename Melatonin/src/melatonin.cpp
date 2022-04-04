@@ -1,17 +1,22 @@
 #include <type_traits>
 #include <optional>
+#include <tuple>
+#include <string_view>
 
 #include <lua.hpp>
 
 #include <catsyn_1.h>
 #include <cathelper.h>
+#include <tatabox.h>
 
 using namespace catsyn;
 
 #define MAKE_TNAME(cls) ("catsyn::" #cls)
 
-[[noreturn]] static void error(lua_State* L, const char* msg) {
-    luaL_error(L, msg);
+template<typename... Args>
+[[noreturn]] static void error(lua_State* L, fmt::format_string<Args...> fmt, Args&&... args) {
+    lua_pushstring(L, format_c(std::move(fmt), std::forward<Args>(args)...));
+    lua_error(L);
 }
 
 static int format_field_replace(lua_State* L);
@@ -30,7 +35,7 @@ static void push(lua_State* L, T val) {
     else if constexpr (std::is_function_v<std::remove_pointer_t<T>>)
         lua_pushcfunction(L, val);
     else if constexpr (std::is_same_v<T, FrameFormat>) {
-        lua_createtable(L, 0, 8);
+        lua_createtable(L, 0, 9);
         luaL_setmetatable(L, MAKE_TNAME(FrameFormat));
         set(L, val.id, "id");
         set(L, val.detail.color_family, "color_family");
@@ -39,6 +44,7 @@ static void push(lua_State* L, T val) {
         set(L, bytes_per_sample(val), "bytes_per_sample");
         set(L, val.detail.width_subsampling, "width_subsampling");
         set(L, val.detail.height_subsampling, "height_subsampling");
+        set(L, num_planes(val), "num_planes");
         set(L, format_field_replace, "replace");
     }
 }
@@ -67,8 +73,16 @@ static T pull(lua_State* L, int idx = -1) {
         return static_cast<T>(val);
     } else if constexpr (std::is_same_v<T, FrameFormat>) {
         FrameFormat ff;
-        ff.id = get<uint32_t>(L, "id", idx).value();
+        try {
+            ff.id = get<uint32_t>(L, "id", idx).value();
+        } catch (std::bad_optional_access&) {
+            error(L, "not a FrameFormat");
+        }
         return ff;
+    } else if constexpr (std::is_same_v<T, std::string_view>) {
+        size_t len;
+        auto s = lua_tolstring(L, idx, &len);
+        return {s, len};
     }
 }
 
@@ -86,18 +100,23 @@ static std::optional<T> get(lua_State* L, const char* key, int idx) {
 
 static int format_field_replace(lua_State* L) {
     auto ff = pull<FrameFormat>(L, 1);
-    if (auto cc = get<ColorFamily>(L, "color_family", 2); cc)
-        ff.detail.color_family = cc.value();
-    if (auto st = get<SampleType>(L, "sample_type", 2); st)
-        ff.detail.sample_type = st.value();
-    if (auto bits = get<unsigned>(L, "bits_per_sample", 2); bits)
-        ff.detail.bits_per_sample = bits.value();
-    if (auto bytes = get<unsigned>(L, "bytes_per_sample", 2); bytes)
-        error(L, "replace bytes_per_sample not supported; use bits_per_sample instead");
-    if (auto sw = get<unsigned>(L, "width_subsampling", 2); sw)
-        ff.detail.width_subsampling = sw.value();
-    if (auto sh = get<unsigned>(L, "height_subsampling", 2); sh)
-        ff.detail.height_subsampling = sh.value();
+    lua_pushnil(L);
+    while (lua_next(L, 2)) {
+        auto key = pull<std::string_view>(L, -2);
+        if (key == "color_family" || key == "1")
+            ff.detail.color_family = pull<ColorFamily>(L);
+        else if (key == "sample_type" || key == "2")
+            ff.detail.sample_type = pull<SampleType>(L);
+        else if (key == "bits_per_sample" || key == "3")
+            ff.detail.bits_per_sample = pull<unsigned>(L);
+        else if (key == "width_subsampling" || key == "4")
+            ff.detail.width_subsampling = pull<unsigned>(L);
+        else if (key == "height_subsampling" || key == "5")
+            ff.detail.height_subsampling = pull<unsigned>(L);
+        else
+            error(L, "unknown parameter '{}'", key);
+        lua_pop(L, 1);
+    }
     push(L, ff);
     return 1;
 }
