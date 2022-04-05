@@ -73,6 +73,7 @@ int setThreadCount(int threads, VSCore* core) noexcept;
 
 struct VSFrameRef {
     catsyn::cat_ptr<const catsyn::IFrame> frame;
+    mutable const catsyn::ITable* props;
     catsyn::cat_ptr<catsyn::IFrame>& get_mut() noexcept;
 };
 

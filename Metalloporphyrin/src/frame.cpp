@@ -190,9 +190,11 @@ void copyFrameProps(const VSFrameRef* src, VSFrameRef* dst, VSCore*) noexcept {
 }
 
 const VSMap* getFramePropsRO(const VSFrameRef* f) noexcept {
-    return new VSMap(f->frame->get_frame_props());
+    f->props = f->frame->get_frame_props();
+    return reinterpret_cast<const VSMap*>(&f->props);
 }
 
 VSMap* getFramePropsRW(VSFrameRef* f) noexcept {
-    return new VSMap(f->get_mut()->get_frame_props_mut());
+    f->props = f->get_mut()->get_frame_props_mut();
+    return reinterpret_cast<VSMap*>(&f->props);
 }
