@@ -305,7 +305,8 @@ class Output final : public Object, virtual public IOutput, public Shuttle {
         post_maintain_task(nucl, substrate, frame_idx,
                            std::make_unique<InnerCallback>([cb = wrap_cat_ptr(cb), &nucl = this->nucl](
                                                                const IFrame* frame, std::exception_ptr exc) {
-                               nucl.callback_queue.push(CallbackTask{[=]() { cb->invoke(frame, exc); }});
+                               nucl.callback_queue.push(
+                                   CallbackTask{[=, frame = wrap_cat_ptr(frame)]() { cb->invoke(frame.get(), exc); }});
                            }));
     }
 
