@@ -136,7 +136,7 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 
 static class Pool {
   public:
-    static constexpr size_t num_size_classes = 13;
+    static constexpr size_t num_size_classes = 16;
     static constexpr size_t size_class_offset = 12;
     static constexpr size_t base = 0x700000000000ull;
     static constexpr size_t bin = 0x2000000000ull;
