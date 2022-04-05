@@ -1,14 +1,12 @@
 #include <new>
 
 #ifdef _WIN32
-#include <intrin.h>
+#include <Windows.h>
 #include <immintrin.h>
+#include <intrin.h>
 #endif
 
-#include <mimalloc.h>
-
 #include <allostery.h>
-#include <tatabox.h>
 
 #ifdef _WIN32
 #define ALWAYS_INLINE __forceinline
@@ -34,28 +32,12 @@ void* operator new[](size_t count) {
     return operator new(count);
 }
 
-void* operator new(size_t count, std::align_val_t al) {
-    not_implemented();
-}
-
-void* operator new[](size_t count, std::align_val_t al) {
-    return operator new(count, al);
-}
-
 void* operator new(size_t count, const std::nothrow_t& tag) noexcept {
     return alloc(count);
 }
 
 void* operator new[](size_t count, const std::nothrow_t& tag) noexcept {
     return operator new(count, tag);
-}
-
-void* operator new(size_t count, std::align_val_t al, const std::nothrow_t& tag) noexcept {
-    not_implemented();
-}
-
-void* operator new[](size_t count, std::align_val_t al, const std::nothrow_t& tag) noexcept {
-    return operator new(count, al, tag);
 }
 
 void operator delete(void* ptr) noexcept {
@@ -67,14 +49,6 @@ void operator delete[](void* ptr) noexcept {
     return operator delete(ptr);
 }
 
-void operator delete(void* ptr, std::align_val_t al) noexcept {
-    return operator delete(ptr);
-}
-
-void operator delete[](void* ptr, std::align_val_t al) noexcept {
-    return operator delete(ptr);
-}
-
 void operator delete(void* ptr, size_t) noexcept {
     return operator delete(ptr);
 }
@@ -83,27 +57,11 @@ void operator delete[](void* ptr, size_t) noexcept {
     return operator delete(ptr);
 }
 
-void operator delete(void* ptr, size_t, std::align_val_t) noexcept {
-    return operator delete(ptr);
-}
-
-void operator delete[](void* ptr, size_t, std::align_val_t) noexcept {
-    return operator delete(ptr);
-}
-
 void operator delete(void* ptr, const std::nothrow_t&) noexcept {
     return operator delete(ptr);
 }
 
 void operator delete[](void* ptr, const std::nothrow_t&) noexcept {
-    return operator delete(ptr);
-}
-
-void operator delete(void* ptr, std::align_val_t, const std::nothrow_t&) noexcept {
-    return operator delete(ptr);
-}
-
-void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t&) noexcept {
     return operator delete(ptr);
 }
 
@@ -167,19 +125,112 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 }
 
 #ifdef ALLOSTERY_IMPL
+
+#include <atomic>
+
+#include <boost/lockfree/stack.hpp>
+
+#include <mimalloc.h>
+
+#include <tatabox.h>
+
+static class Pool {
+  public:
+    static constexpr size_t num_size_classes = 13;
+    static constexpr size_t size_class_offset = 12;
+    static constexpr size_t base = 0x700000000000ull;
+    static constexpr size_t bin = 0x2000000000ull;
+    static constexpr size_t large_page_min = 0x200000ull;
+
+  private:
+    struct Stack : boost::lockfree::stack<void*, boost::lockfree::allocator<mi_stl_allocator<char>>> {
+        Stack() noexcept : stack(64) {}
+    };
+
+    Stack stacks[num_size_classes];
+    std::atomic_size_t cur[num_size_classes];
+
+    static size_t size_to_size_class(size_t size) noexcept {
+        auto size_class = std::bit_width(size - 1) - size_class_offset;
+        cond_check(size_class < num_size_classes, "alloc too large");
+        return size_class;
+    }
+
+    static size_t size_class_to_size(size_t size_class) noexcept {
+        return 1 << size_class_offset << size_class;
+    }
+
+  public:
+    Pool() noexcept {
+        cond_check(reinterpret_cast<size_t>(VirtualAlloc(reinterpret_cast<void*>(base), bin * num_size_classes,
+                                                         MEM_RESERVE, PAGE_READWRITE)) == base,
+                   "alloc failed");
+        HANDLE hToken;
+        TOKEN_PRIVILEGES tp;
+        BOOL status;
+        OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+        LookupPrivilegeValueW(nullptr, L"SeLockMemoryPrivilege", &tp.Privileges[0].Luid);
+        tp.PrivilegeCount = 1;
+        tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+        status = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES) nullptr, 0);
+        cond_check(status, "failed to gain privilege");
+        CloseHandle(hToken);
+    }
+
+    size_t alloc_size(void* ptr) noexcept {
+        auto pv = reinterpret_cast<size_t>(ptr);
+        return size_class_to_size((pv - base) / bin);
+    }
+
+    void* alloc(size_t size) noexcept {
+        auto size_class = size_to_size_class(size);
+        auto round_size = size_class_to_size(size_class);
+        auto& stack = stacks[size_class];
+        void* p;
+        if (stack.pop(p))
+            return p;
+        auto offset = cur[size_class].fetch_add(1, std::memory_order_acq_rel);
+        offset *= round_size;
+        cond_check(offset < bin, "pool exhausted");
+        p = reinterpret_cast<void*>(base + bin * size_class + offset);
+        cond_check(VirtualAlloc(p, round_size, MEM_COMMIT | (round_size >= large_page_min ? MEM_LARGE_PAGES : 0),
+                                PAGE_READWRITE) == p,
+                   "alloc failed");
+        return p;
+    }
+
+    void dealloc(void* ptr) noexcept {
+        auto size = alloc_size(ptr);
+        auto size_class = size_to_size_class(size);
+        auto& stack = stacks[size_class];
+        stack.push(ptr);
+    }
+
+    bool own_ptr(void* ptr) noexcept {
+        auto pv = reinterpret_cast<size_t>(ptr);
+        return pv >= base && pv < base + bin * num_size_classes;
+    }
+} pool;
+
 ALLOSTERY_API void* alloc(size_t size) {
-    auto alignment = std::hardware_destructive_interference_size;
-    if (size < alignment)
-        return mi_malloc_small(size);
+    if (size >= 1 << Pool::size_class_offset)
+        return pool.alloc(size);
     else
-        return mi_aligned_alloc(alignment, (size + alignment - 1) / alignment * alignment);
+        return mi_malloc(size);
 }
 
 ALLOSTERY_API void dealloc(void* ptr) {
-    mi_free(ptr);
+    if (pool.own_ptr(ptr))
+        pool.dealloc(ptr);
+    else
+        mi_free(ptr);
 }
 
 ALLOSTERY_API size_t alloc_size(void* ptr) {
-    return mi_malloc_size(ptr);
+    if (pool.own_ptr(ptr))
+        return pool.alloc_size(ptr);
+    else
+        return mi_malloc_size(ptr);
 }
+
 #endif
