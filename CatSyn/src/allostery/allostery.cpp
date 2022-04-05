@@ -1,8 +1,14 @@
 #include <new>
 
-#include <snmalloc.h>
+#ifdef _WIN32
+#include <intrin.h>
+#include <immintrin.h>
+#endif
+
+#include <mimalloc.h>
 
 #include <allostery.h>
+#include <tatabox.h>
 
 #ifdef _WIN32
 #define ALWAYS_INLINE __forceinline
@@ -29,7 +35,7 @@ void* operator new[](size_t count) {
 }
 
 void* operator new(size_t count, std::align_val_t al) {
-    return operator new(snmalloc::aligned_size(static_cast<size_t>(al), count));
+    not_implemented();
 }
 
 void* operator new[](size_t count, std::align_val_t al) {
@@ -45,7 +51,7 @@ void* operator new[](size_t count, const std::nothrow_t& tag) noexcept {
 }
 
 void* operator new(size_t count, std::align_val_t al, const std::nothrow_t& tag) noexcept {
-    return operator new(snmalloc::aligned_size(static_cast<size_t>(al), count), tag);
+    not_implemented();
 }
 
 void* operator new[](size_t count, std::align_val_t al, const std::nothrow_t& tag) noexcept {
@@ -101,10 +107,6 @@ void operator delete[](void* ptr, std::align_val_t, const std::nothrow_t&) noexc
     return operator delete(ptr);
 }
 
-size_t round_size(size_t size) noexcept {
-    return snmalloc::round_size(size);
-}
-
 template<size_t size> ALWAYS_INLINE void copy_one(void* __restrict dst, const void* __restrict src) {
     struct Block {
         char data[size];
@@ -156,7 +158,7 @@ void round_copy(void* __restrict dst, const void* __restrict src, size_t size) n
 
 void* re_alloc(void* ptr, size_t new_size) noexcept {
     auto old_size = alloc_size(ptr);
-    if (round_size(old_size) >= new_size)
+    if (old_size >= new_size)
         return ptr;
     auto new_ptr = operator new(new_size);
     round_copy(new_ptr, ptr, old_size);
@@ -166,14 +168,18 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 
 #ifdef ALLOSTERY_IMPL
 ALLOSTERY_API void* alloc(size_t size) {
-    return snmalloc::ThreadAlloc::get()->alloc(size);
+    auto alignment = std::hardware_destructive_interference_size;
+    if (size < alignment)
+        return mi_malloc_small(size);
+    else
+        return mi_aligned_alloc(alignment, (size + alignment - 1) / alignment * alignment);
 }
 
 ALLOSTERY_API void dealloc(void* ptr) {
-    return snmalloc::ThreadAlloc::get()->dealloc(ptr);
+    mi_free(ptr);
 }
 
 ALLOSTERY_API size_t alloc_size(void* ptr) {
-    return snmalloc::ThreadAlloc::get()->alloc_size(ptr);
+    return mi_malloc_size(ptr);
 }
 #endif

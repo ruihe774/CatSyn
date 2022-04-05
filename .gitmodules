@@ -16,3 +16,6 @@
 [submodule "wil"]
 	path = wil
 	url = https://github.com/Microsoft/wil.git
+[submodule "mimalloc"]
+	path = mimalloc
+	url = https://github.com/microsoft/mimalloc.git

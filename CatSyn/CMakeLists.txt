@@ -6,23 +6,6 @@ project(CatSyn
     DESCRIPTION "Catalyzed video processing framework"
 )
 
-add_library(allostery_lib STATIC
-    src/allostery/allostery.cpp
-)
-target_sources(allostery_lib PUBLIC
-    src/allostery/allostery.h
-)
-target_include_directories(allostery_lib PUBLIC src/allostery)
-target_link_libraries(allostery_lib PRIVATE snmalloc_lib)
-add_library(allostery SHARED
-    src/allostery/allostery.cpp
-    src/allostery/allostery.h
-)
-target_include_directories(allostery PRIVATE src/allostery)
-target_link_libraries(allostery PRIVATE snmalloc_lib)
-target_link_libraries(allostery INTERFACE allostery_lib)
-target_compile_definitions(allostery PRIVATE ALLOSTERY_IMPL)
-
 add_library(tatabox INTERFACE)
 target_sources(tatabox PUBLIC
     src/tatabox/tatabox.h
@@ -31,6 +14,23 @@ target_sources(tatabox PUBLIC
 )
 target_include_directories(tatabox INTERFACE src/tatabox)
 target_link_libraries(tatabox INTERFACE fmt)
+
+add_library(allostery_lib STATIC
+    src/allostery/allostery.cpp
+)
+target_sources(allostery_lib PUBLIC
+    src/allostery/allostery.h
+)
+target_include_directories(allostery_lib PUBLIC src/allostery)
+target_link_libraries(allostery_lib PRIVATE mimalloc tatabox)
+add_library(allostery SHARED
+    src/allostery/allostery.cpp
+    src/allostery/allostery.h
+)
+target_include_directories(allostery PRIVATE src/allostery)
+target_link_libraries(allostery PRIVATE mimalloc tatabox)
+target_link_libraries(allostery INTERFACE allostery_lib)
+target_compile_definitions(allostery PRIVATE ALLOSTERY_IMPL)
 
 add_library(catsyn SHARED
     src/catimpl.h
