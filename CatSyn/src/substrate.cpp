@@ -11,7 +11,7 @@ struct FrameInstance {
     cat_ptr<const IFrame> product;
     boost::container::small_vector<FrameInstance*, 10> inputs;
     boost::container::small_vector<FrameInstance*, 30> outputs;
-    std::unique_ptr<InnerCallback> callback;
+    cat_ptr<ICallback> callback;
     FrameData* frame_data;
     size_t tick;
     std::atomic_flag taken;
@@ -50,8 +50,7 @@ void Nucleus::unregister_filter(const IFilter* filter) noexcept {
     substrates.erase(filter);
 }
 
-MaintainTask::MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx,
-                           std::unique_ptr<InnerCallback> callback) noexcept
+MaintainTask::MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx, cat_ptr<ICallback> callback) noexcept
     : variant(Construct{std::move(substrate), frame_idx, std::move(callback)}) {}
 MaintainTask::MaintainTask(FrameInstance* inst, std::exception_ptr exc) noexcept : variant(Notify{inst, exc}) {}
 
@@ -129,14 +128,20 @@ construct(Nucleus& nucl, size_t tick,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
-          Substrate* substrate, size_t frame_idx, std::unique_ptr<InnerCallback> callback = {},
-          bool missed = false) noexcept;
+          Substrate* substrate, size_t frame_idx, cat_ptr<ICallback> callback = {}, bool missed = false) noexcept;
 
-static void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept;
+static void kill_tree(Nucleus& nucl, FrameInstance* inst, std::unordered_set<FrameInstance*>& alive,
+                      std::exception_ptr exc) noexcept;
 
 static void post_work(
     Nucleus& nucl, FrameInstance* inst,
     std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck) noexcept;
+
+static void post_callback(Nucleus& nucl, cat_ptr<ICallback>&& callback, cat_ptr<const IFrame> frame,
+                          std::exception_ptr exc) noexcept {
+    auto cb{std::move(callback)};
+    nucl.callback_queue.push(CallbackTask{[=]() { cb->invoke(frame.get(), exc); }});
+}
 
 void maintainer(Nucleus& nucl) {
     std::unordered_map<std::pair<Substrate*, size_t>, std::unique_ptr<FrameInstance>> instances;
@@ -162,17 +167,15 @@ void maintainer(Nucleus& nucl) {
                             if (alive.find(output) != alive.end() && !output->product && check_all_inputs_ready(output))
                                 post_work(nucl, output, neck);
                     if (exc) {
-                        kill_tree(inst, alive, exc);
+                        kill_tree(nucl, inst, alive, exc);
                         for (auto it = instances.begin(); it != instances.end();) {
                             if (alive.find(it->second.get()) == alive.end())
                                 it = instances.erase(it);
                             else
                                 ++it;
                         }
-                    } else if (inst->callback) {
-                        (*inst->callback)(inst->product.get(), exc);
-                        inst->callback.reset();
-                    }
+                    } else if (inst->callback)
+                        post_callback(nucl, std::move(inst->callback), inst->product, exc);
                 }
             } else {
                 auto& t = std::get<Construct>(task);
@@ -217,13 +220,13 @@ construct(Nucleus& nucl, size_t tick,
           std::unordered_set<FrameInstance*>& alive,
           std::unordered_map<Substrate*, std::pair<bool, std::set<FrameInstance*, FrameInstanceTickGreater>>>& neck,
           std::unordered_set<std::pair<Substrate*, size_t>>& history, std::unordered_map<Substrate*, unsigned>& miss,
-          Substrate* substrate, size_t frame_idx, std::unique_ptr<InnerCallback> callback, bool missed) noexcept {
+          Substrate* substrate, size_t frame_idx, cat_ptr<ICallback> callback, bool missed) noexcept {
     auto key = std::make_pair(substrate, frame_idx);
     if (auto it = instances.find(key); it != instances.end()) {
         auto inst = it->second.get();
         if (callback) {
             if (inst->product)
-                (*callback)(inst->product.get(), {});
+                post_callback(nucl, std::move(callback), inst->product, {});
             else
                 inst->callback = std::move(callback);
         }
@@ -274,13 +277,14 @@ construct(Nucleus& nucl, size_t tick,
     return inst;
 }
 
-void kill_tree(FrameInstance* inst, std::unordered_set<FrameInstance*>& alive, std::exception_ptr exc) noexcept {
+void kill_tree(Nucleus& nucl, FrameInstance* inst, std::unordered_set<FrameInstance*>& alive,
+               std::exception_ptr exc) noexcept {
     inst->substrate->filter->drop_frame_data(inst->frame_data);
     if (inst->callback)
-        (*inst->callback)(nullptr, exc);
+        post_callback(nucl, std::move(inst->callback), nullptr, exc);
     for (auto output : inst->outputs)
         if (alive.find(output) != alive.end())
-            kill_tree(output, alive, exc);
+            kill_tree(nucl, output, alive, exc);
     alive.erase(inst);
 }
 
@@ -302,12 +306,7 @@ class Output final : public Object, virtual public IOutput, public Shuttle {
     cat_ptr<Substrate> substrate;
 
     void get_frame(size_t frame_idx, ICallback* cb) noexcept final {
-        post_maintain_task(nucl, substrate, frame_idx,
-                           std::make_unique<InnerCallback>([cb = wrap_cat_ptr(cb), &nucl = this->nucl](
-                                                               const IFrame* frame, std::exception_ptr exc) {
-                               nucl.callback_queue.push(
-                                   CallbackTask{[=, frame = wrap_cat_ptr(frame)]() { cb->invoke(frame.get(), exc); }});
-                           }));
+        post_maintain_task(nucl, substrate, frame_idx, cb);
     }
 
     explicit Output(Nucleus& nucl, ISubstrate* substrate) noexcept

@@ -107,12 +107,10 @@ struct FrameInstanceTickGreater {
     bool operator()(const FrameInstance* l, const FrameInstance* r) const noexcept;
 };
 
-typedef std::function<void(const IFrame* frame, std::exception_ptr exc)> InnerCallback;
-
 struct Construct {
     cat_ptr<Substrate> substrate;
     size_t frame_idx;
-    std::unique_ptr<InnerCallback> callback;
+    cat_ptr<ICallback> callback;
 };
 struct Notify {
     FrameInstance* inst;
@@ -121,7 +119,7 @@ struct Notify {
 
 struct MaintainTask : std::variant<Construct, Notify> {
     explicit MaintainTask(cat_ptr<Substrate> substrate, size_t frame_idx,
-                          std::unique_ptr<InnerCallback> callback = {}) noexcept;
+                          cat_ptr<ICallback> callback = {}) noexcept;
     explicit MaintainTask(FrameInstance* inst, std::exception_ptr exc = {}) noexcept;
 };
 
