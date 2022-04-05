@@ -21,10 +21,7 @@ if(CLANG)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Xclang -fexternc-nounwind")
 endif()
 
-add_subdirectory(snmalloc EXCLUDE_FROM_ALL)
-target_compile_definitions(snmalloc_lib INTERFACE SNMALLOC_USE_LARGE_CHUNKS)
-set(MI_USE_CXX ON CACHE BOOL "Use the C++ compiler to compile the library (instead of the C compiler)" FORCE)
-add_subdirectory(mimalloc EXCLUDE_FROM_ALL)
+include(mimalloc.cmake)
 
 add_subdirectory(boost EXCLUDE_FROM_ALL)
 
