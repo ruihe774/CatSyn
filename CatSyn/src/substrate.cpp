@@ -159,7 +159,9 @@ void maintainer(Nucleus& nucl) {
                 auto exc = t.exc;
                 if (alive.find(inst) != alive.end()) {
                     if (inst->single_threaded) {
-                        neck[inst->substrate.get()].first = false;
+                        auto& item = neck[inst->substrate.get()];
+                        item.first = false;
+                        item.second.erase(inst);
                         inst->single_threaded = false;
                     }
                     if (!exc)
