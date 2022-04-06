@@ -168,7 +168,7 @@ static class Pool {
         uint64_t cur_time =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch())
                 .count();
-        if (cur_time - last_time > 4) {
+        if (cur_time - last_time > 8) {
             last_time = cur_time;
             format_to_err("MEMORY LOW\n");
             auto self = static_cast<Pool*>(pl);
@@ -176,7 +176,8 @@ static class Pool {
             for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
                 auto& stack = self->stacks[size_class];
                 stack.consume_all([&temp, size_class](void* p) {
-                    VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
+                    cond_check(DiscardVirtualMemory(p, size_class_to_size(size_class)) == ERROR_SUCCESS,
+                               "failed to discard memory");
                     temp.push(p);
                 });
                 while (!temp.empty()) {
