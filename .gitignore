@@ -1,3 +1,5 @@
 /build*
 .idea
 tests
+target
+Cargo.lock
