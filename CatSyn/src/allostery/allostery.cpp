@@ -127,6 +127,7 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 #ifdef ALLOSTERY_IMPL
 
 #include <atomic>
+#include <stack>
 
 #include <boost/lockfree/stack.hpp>
 
@@ -149,6 +150,7 @@ static class Pool {
 
     Stack stacks[num_size_classes];
     std::atomic_size_t cur[num_size_classes];
+    HANDLE notification_handle, wait_handle;
 
     static size_t size_to_size_class(size_t size) noexcept {
         auto size_class = std::bit_width(size - 1) - size_class_offset;
@@ -160,11 +162,29 @@ static class Pool {
         return 1 << size_class_offset << size_class;
     }
 
+    static void CALLBACK low_memory(PVOID pl, BOOLEAN) {
+        format_to_err("MEMORY LOW\n");
+        auto self = static_cast<Pool*>(pl);
+        std::stack<void*> temp;
+        for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
+            auto& stack = self->stacks[size_class];
+            stack.consume_all([&temp, size_class](void* p) {
+                VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
+                temp.push(p);
+            });
+            while (!temp.empty()) {
+                stack.push(temp.top());
+                temp.pop();
+            }
+        }
+    }
+
   public:
     Pool() noexcept {
         cond_check(reinterpret_cast<size_t>(VirtualAlloc(reinterpret_cast<void*>(base), bin * num_size_classes,
                                                          MEM_RESERVE, PAGE_READWRITE)) == base,
                    "alloc failed");
+
         HANDLE hToken;
         TOKEN_PRIVILEGES tp;
         BOOL status;
@@ -175,6 +195,15 @@ static class Pool {
         status = AdjustTokenPrivileges(hToken, FALSE, &tp, 0, (PTOKEN_PRIVILEGES) nullptr, 0);
         cond_check(status, "failed to gain privilege");
         CloseHandle(hToken);
+
+        notification_handle = CreateMemoryResourceNotification(LowMemoryResourceNotification);
+        RegisterWaitForSingleObject(&wait_handle, notification_handle, low_memory, this, INFINITE, WT_EXECUTEDEFAULT);
+    }
+
+    ~Pool() {
+        CloseHandle(wait_handle);
+        CloseHandle(notification_handle);
+        VirtualFree(reinterpret_cast<void*>(base), 0, MEM_RELEASE);
     }
 
     size_t alloc_size(void* ptr) noexcept {
