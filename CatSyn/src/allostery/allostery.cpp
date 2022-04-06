@@ -127,6 +127,7 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 #ifdef ALLOSTERY_IMPL
 
 #include <atomic>
+#include <chrono>
 #include <stack>
 
 #include <boost/lockfree/stack.hpp>
@@ -163,18 +164,25 @@ static class Pool {
     }
 
     static void CALLBACK low_memory(PVOID pl, BOOLEAN) {
-        format_to_err("MEMORY LOW\n");
-        auto self = static_cast<Pool*>(pl);
-        std::stack<void*> temp;
-        for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
-            auto& stack = self->stacks[size_class];
-            stack.consume_all([&temp, size_class](void* p) {
-                VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
-                temp.push(p);
-            });
-            while (!temp.empty()) {
-                stack.push(temp.top());
-                temp.pop();
+        static uint64_t last_time = 0;
+        uint64_t cur_time =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        if (cur_time - last_time > 4) {
+            last_time = cur_time;
+            format_to_err("MEMORY LOW\n");
+            auto self = static_cast<Pool*>(pl);
+            std::stack<void*> temp;
+            for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
+                auto& stack = self->stacks[size_class];
+                stack.consume_all([&temp, size_class](void* p) {
+                    VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
+                    temp.push(p);
+                });
+                while (!temp.empty()) {
+                    stack.push(temp.top());
+                    temp.pop();
+                }
             }
         }
     }
