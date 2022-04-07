@@ -24,11 +24,11 @@ fn main() {
         .stdin(Stdio::piped())
         .spawn()
         .expect("process 2 failed to spawn");
-    let (sender, receiver) = sync_channel(8192);
+    let (sender, receiver) = sync_channel(1024);
     let t1 = thread::spawn(move || {
         let p1_out = p1.stdout.as_mut().unwrap();
         loop {
-            let mut buf = [MaybeUninit::<u8>::uninit(); 8192];
+            let mut buf = [MaybeUninit::<u8>::uninit(); 32768];
             let mut read_buf = ReadBuf::uninit(&mut buf);
             p1_out.read_buf(&mut read_buf).unwrap();
             let filled = read_buf.filled();
