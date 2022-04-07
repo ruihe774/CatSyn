@@ -1,9 +1,10 @@
+#![feature(exit_status_error)]
 #![feature(maybe_uninit_slice)]
 #![feature(write_all_vectored)]
 
 use std::env;
 use std::io::{IoSlice, Read, Write};
-use std::mem::MaybeUninit;
+use std::mem::{drop, MaybeUninit};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::sync_channel;
 use std::thread;
@@ -26,7 +27,7 @@ fn main() {
         .expect("process 2 failed to spawn");
     let (sender, receiver) = sync_channel(1024);
     let t1 = thread::spawn(move || {
-        let p1_out = p1.stdout.as_mut().unwrap();
+        let mut p1_out = p1.stdout.take().unwrap();
         loop {
             let mut buf = vec![MaybeUninit::<u8>::uninit(); 32768];
             let size = p1_out
@@ -47,10 +48,11 @@ fn main() {
                 break;
             }
         }
-        p1.wait().expect("process 1 failed");
+        drop(p1_out);
+        p1.wait().unwrap().exit_ok().expect("process 1 failed");
     });
     let t2 = thread::spawn(move || {
-        let p2_in = p2.stdin.as_mut().unwrap();
+        let mut p2_in = p2.stdin.take().unwrap();
         loop {
             let pieces: Vec<_> = receiver.iter().take(1).chain(receiver.try_iter()).collect();
             if pieces.is_empty() {
@@ -64,8 +66,11 @@ fn main() {
                 break;
             }
         }
-        p2.wait().expect("process 2 failed");
+        drop(p2_in);
+        p2.wait().unwrap().exit_ok().expect("process 2 failed");
     });
-    t1.join().unwrap();
-    t2.join().unwrap();
+    match (t1.join(), t2.join()) {
+        (Ok(_), Ok(_)) => (),
+        _ => panic!("subprocess failed"),
+    }
 }
