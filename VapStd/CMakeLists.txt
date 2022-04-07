@@ -61,3 +61,4 @@ add_library(vapstd-text SHARED vapstd-text.cpp internalfilters.h)
 target_link_libraries(vapstd-text PRIVATE vapstd)
 
 install(TARGETS vapstd vapstd-core vapstd-resize vapstd-text)
+install_pdb(vapstd)

@@ -39,6 +39,8 @@ add_subdirectory(Metalloporphyrin)
 
 add_subdirectory(VapStd)
 
+add_subdirectory(Valve)
+
 set(CMAKE_C_FLAGS "${C_FLAGS_BACKUP}")
 set(CMAKE_CXX_FLAGS "${CXX_FLAGS_BACKUP}")
 
