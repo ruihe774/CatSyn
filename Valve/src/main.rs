@@ -1,8 +1,8 @@
-#![feature(read_buf)]
+#![feature(maybe_uninit_slice)]
 #![feature(write_all_vectored)]
 
 use std::env;
-use std::io::{IoSlice, Read, ReadBuf, Write};
+use std::io::{IoSlice, Read, Write};
 use std::mem::MaybeUninit;
 use std::process::{Command, Stdio};
 use std::sync::mpsc::sync_channel;
@@ -28,14 +28,22 @@ fn main() {
     let t1 = thread::spawn(move || {
         let p1_out = p1.stdout.as_mut().unwrap();
         loop {
-            let mut buf = [MaybeUninit::<u8>::uninit(); 32768];
-            let mut read_buf = ReadBuf::uninit(&mut buf);
-            p1_out.read_buf(&mut read_buf).unwrap();
-            let filled = read_buf.filled();
-            if filled.is_empty() {
+            let mut buf = vec![MaybeUninit::<u8>::uninit(); 32768];
+            let size = p1_out
+                .read(unsafe { MaybeUninit::slice_assume_init_mut(&mut buf) })
+                .unwrap();
+            if size == 0 {
                 break;
             }
-            if sender.send(Vec::from(filled)).is_err() {
+            if sender
+                .send(
+                    buf.into_iter()
+                        .take(size)
+                        .map(|byte| unsafe { byte.assume_init() })
+                        .collect::<Vec<u8>>(),
+                )
+                .is_err()
+            {
                 break;
             }
         }
