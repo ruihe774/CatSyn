@@ -4,10 +4,13 @@
 
 #include <Windows.h>
 
-static void panic(const char* msg) {
+_Noreturn static void panic(const char* msg) {
     fputs(msg, stderr);
+    fflush(stderr);
     abort();
 }
+
+#define BUF_SIZE 0x2000000
 
 int main() {
     wchar_t* cmdline = GetCommandLineW();
@@ -34,31 +37,37 @@ int main() {
         panic("no '---' found in commandline\n");
     *sep = '\0';
 
-    SECURITY_ATTRIBUTES inheritable = {.bInheritHandle = TRUE};
-
-    HANDLE read_pipe, write_pipe;
-    if (!CreatePipe(&read_pipe, &write_pipe, &inheritable, 0x8000000))
+    HANDLE pipe1_r, pipe1_w, pipe2_r, pipe2_w;
+    if (!CreatePipe(&pipe1_r, &pipe1_w, NULL, BUF_SIZE) || !CreatePipe(&pipe2_r, &pipe2_w, NULL, 0))
         panic("failed to create pipe\n");
 
+    SetHandleInformation(pipe1_w, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     STARTUPINFOW si1 = {.cb = sizeof(STARTUPINFOW),
                         .dwFlags = STARTF_USESTDHANDLES,
                         .hStdInput = GetStdHandle(STD_INPUT_HANDLE),
-                        .hStdOutput = write_pipe,
+                        .hStdOutput = pipe1_w,
                         .hStdError = GetStdHandle(STD_ERROR_HANDLE)};
     PROCESS_INFORMATION pi1;
     if (!CreateProcessW(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si1, &pi1))
         panic("failed to spawn process 1\n");
-    CloseHandle(write_pipe);
+    CloseHandle(pipe1_w);
 
+    SetHandleInformation(pipe2_r, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT);
     STARTUPINFOW si2 = {.cb = sizeof(STARTUPINFOW),
                         .dwFlags = STARTF_USESTDHANDLES,
-                        .hStdInput = read_pipe,
+                        .hStdInput = pipe2_r,
                         .hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE),
                         .hStdError = GetStdHandle(STD_ERROR_HANDLE)};
     PROCESS_INFORMATION pi2;
     if (!CreateProcessW(NULL, sep + 5, NULL, NULL, TRUE, 0, NULL, NULL, &si2, &pi2))
         panic("failed to spawn process 2\n");
-    CloseHandle(read_pipe);
+    CloseHandle(pipe2_r);
+
+    char buf[BUF_SIZE];
+    for (DWORD len; ReadFile(pipe1_r, buf, BUF_SIZE, &len, NULL) && len && WriteFile(pipe2_w, buf, len, NULL, NULL);)
+        ;
+    CloseHandle(pipe1_r);
+    CloseHandle(pipe2_w);
 
     HANDLE processes[] = {pi1.hProcess, pi2.hProcess};
     if (WaitForMultipleObjects(2, processes, TRUE, INFINITE) == WAIT_FAILED)
