@@ -129,6 +129,7 @@ void* re_alloc(void* ptr, size_t new_size) noexcept {
 #include <atomic>
 #include <chrono>
 #include <stack>
+#include <vector>
 
 #include <boost/lockfree/stack.hpp>
 
@@ -146,7 +147,7 @@ static class Pool {
 
   private:
     struct Stack : boost::lockfree::stack<void*, boost::lockfree::allocator<mi_stl_allocator<char>>> {
-        Stack() noexcept : stack(64) {}
+        Stack() noexcept : stack(8) {}
     };
 
     Stack stacks[num_size_classes];
@@ -172,7 +173,7 @@ static class Pool {
             last_time = cur_time;
             format_to_err("MEMORY LOW\n");
             auto self = static_cast<Pool*>(pl);
-            std::stack<void*> temp;
+            std::stack<void*, std::vector<void*, mi_stl_allocator<void*>>> temp;
             for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
                 auto& stack = self->stacks[size_class];
                 stack.consume_all([&temp, size_class](void* p) {
@@ -205,7 +206,8 @@ static class Pool {
         CloseHandle(hToken);
 
         notification_handle = CreateMemoryResourceNotification(LowMemoryResourceNotification);
-        RegisterWaitForSingleObject(&wait_handle, notification_handle, low_memory, this, INFINITE, WT_EXECUTEDEFAULT);
+        RegisterWaitForSingleObject(&wait_handle, notification_handle, low_memory, this, INFINITE,
+                                    WT_EXECUTEINWAITTHREAD);
     }
 
     ~Pool() {
