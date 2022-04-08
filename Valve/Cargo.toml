@@ -1,5 +1,0 @@
-[package]
-name = "valve"
-version = "1.0.0"
-edition = "2018"
-description = "Buffered pipe"
