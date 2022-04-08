@@ -177,7 +177,9 @@ static class Pool {
             for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
                 auto& stack = self->stacks[size_class];
                 stack.consume_all([&temp, size_class](void* p) {
+                    // https://devblogs.microsoft.com/oldnewthing/20170113-00/?p=95185
                     VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
+                    VirtualUnlock(p, size_class_to_size(size_class));
                     temp.push(p);
                 });
                 while (!temp.empty()) {
