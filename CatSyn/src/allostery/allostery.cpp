@@ -176,8 +176,7 @@ static class Pool {
             for (size_t size_class = 0; size_class < num_size_classes; ++size_class) {
                 auto& stack = self->stacks[size_class];
                 stack.consume_all([&temp, size_class](void* p) {
-                    cond_check(DiscardVirtualMemory(p, size_class_to_size(size_class)) == ERROR_SUCCESS,
-                               "failed to discard memory");
+                    VirtualAlloc(p, size_class_to_size(size_class), MEM_RESET, PAGE_READWRITE);
                     temp.push(p);
                 });
                 while (!temp.empty()) {
