@@ -35,7 +35,7 @@ struct VSEnzyme final : public Object, public catsyn::IEnzyme {
 
 std::vector<catsyn::ArgSpec> parse_arg_string(const char* args) noexcept {
     static std::regex arg_reg{R"((\w+):(int|float|data|clip|frame|func)(\[\])?(?::(opt|empty))?)"};
-    static boost::container::static_vector<char, 16384> name_buf;
+    static boost::container::static_vector<char, 65535> name_buf;
     std::vector<catsyn::ArgSpec> result;
     for (std::cregex_iterator it{args, args + strlen(args), arg_reg}, end; it != end; ++it) {
         auto&& match = *it;
