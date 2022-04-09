@@ -43,9 +43,7 @@ if(CAT_OPT_FOR_ARCH STREQUAL "skylake")
 endif()
 
 if(GNULIKE)
-    set(OPT_FLAGS "${OPT_FLAGS} -Ofast")
-elseif(MSVC)
-    set(OPT_FLAGS "${OPT_FLAGS} /fp:fast")
+    set(OPT_FLAGS "${OPT_FLAGS} -O3")
 endif()
 
 if(CLANG)
