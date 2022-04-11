@@ -7,6 +7,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <shared_mutex>
 
 #include <boost/container/small_vector.hpp>
 
@@ -96,6 +97,7 @@ class Table final : public Object, public virtual ITable {
 class Substrate final : public Object, virtual public ISubstrate {
   public:
     cat_ptr<IFilter> filter;
+    std::shared_mutex init_mtx;
 
     VideoInfo get_video_info() const noexcept final;
 

@@ -2,6 +2,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include <boost/container/flat_set.hpp>
 #include <boost/functional/hash.hpp>
 
 #include <catimpl.h>
@@ -89,23 +90,43 @@ static void post_work_direct(Nucleus& nucl, FrameInstance* inst) noexcept {
 }
 
 void worker(Nucleus& nucl) {
+    boost::container::flat_set<Substrate*> inited;
     nucl.work_queue.stream([&](FrameInstance* inst) {
         if (inst->taken.test_and_set(std::memory_order_acq_rel))
             return;
-        boost::container::small_vector<const IFrame*, 10> input_frames;
-        for (auto input : inst->inputs)
-            input_frames.push_back(input->product.get());
-        cat_ptr<const IFrame> product;
-        auto filter = inst->substrate->filter.get();
-        try {
-            filter->process_frame(input_frames.data(), &inst->frame_data, product.put_const());
-            filter->drop_frame_data(inst->frame_data);
-        } catch (...) {
-            post_maintain_task(nucl, inst, std::current_exception());
+        auto substrate = inst->substrate.get();
+        std::unique_lock<std::shared_mutex> init_lock(substrate->init_mtx, std::defer_lock);
+        std::shared_lock<std::shared_mutex> proc_lock(substrate->init_mtx, std::defer_lock);
+        if (inited.contains(substrate)) {
+            if (!proc_lock.try_lock()) [[unlikely]]
+                goto repost;
+        } else [[unlikely]] {
+            if (init_lock.try_lock())
+                inited.emplace(substrate);
+            else
+                goto repost;
+        }
+        {
+            boost::container::small_vector<const IFrame*, 10> input_frames;
+            for (auto input : inst->inputs)
+                input_frames.push_back(input->product.get());
+            cat_ptr<const IFrame> product;
+            auto filter = substrate->filter.get();
+            try {
+                filter->process_frame(input_frames.data(), &inst->frame_data, product.put_const());
+                filter->drop_frame_data(inst->frame_data);
+            } catch (...) {
+                post_maintain_task(nucl, inst, std::current_exception());
+                return;
+            }
+            inst->product = std::move(product);
+            post_maintain_task(nucl, inst);
             return;
         }
-        inst->product = std::move(product);
-        post_maintain_task(nucl, inst);
+    repost:
+        ++inst->tick;
+        inst->taken.clear(std::memory_order_release);
+        nucl.work_queue.push(inst);
     });
 }
 
