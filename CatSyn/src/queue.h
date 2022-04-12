@@ -221,28 +221,23 @@ class Wedge {
 
     bool try_lock_shared() noexcept {
         if (atm->fetch_add(1, std::memory_order_acq_rel) & highest) {
-            atm->fetch_sub(1, std::memory_order_release);
+            atm->fetch_sub(1, std::memory_order_relaxed);
             return false;
         } else
             return true;
     }
 
     bool try_lock_exclusive() noexcept {
-        if (auto orig = atm->fetch_or(highest, std::memory_order_acq_rel); orig & highest)
-            return false;
-        else if (orig) {
-            atm->fetch_and(~highest, std::memory_order_release);
-            return false;
-        } else
-            return true;
+        auto orig = atm->load(std::memory_order_relaxed);
+        return orig == 0 && atm->compare_exchange_strong(orig, highest, std::memory_order_release);
     }
 
     void unlock_shared() noexcept {
-        atm->fetch_sub(1, std::memory_order_release);
+        atm->fetch_sub(1, std::memory_order_relaxed);
     }
 
     void unlock_exclusive() noexcept {
-        atm->fetch_and(~highest, std::memory_order_release);
+        atm->fetch_and(~highest, std::memory_order_relaxed);
     }
 };
 
