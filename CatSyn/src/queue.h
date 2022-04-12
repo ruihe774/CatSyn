@@ -229,7 +229,7 @@ class Wedge {
 
     bool try_lock_exclusive() noexcept {
         auto orig = atm->load(std::memory_order_relaxed);
-        return orig == 0 && atm->compare_exchange_strong(orig, highest, std::memory_order_release);
+        return orig == 0 && atm->compare_exchange_weak(orig, highest, std::memory_order_release);
     }
 
     void unlock_shared() noexcept {
