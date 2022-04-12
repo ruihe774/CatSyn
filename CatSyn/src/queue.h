@@ -210,3 +210,78 @@ template<typename T, typename Compare = std::less<>> class PriorityQueue {
         }
     }
 };
+
+class Wedge {
+    static constexpr unsigned highest = 1 << (sizeof(unsigned) * 8 - 1);
+    std::atomic_uint* atm;
+
+  public:
+    explicit Wedge(std::atomic_uint& atm) noexcept : atm(&atm) {}
+    Wedge() noexcept : atm(nullptr) {}
+
+    bool try_lock_shared() noexcept {
+        if (atm->fetch_add(1, std::memory_order_acq_rel) & highest) {
+            atm->fetch_sub(1, std::memory_order_release);
+            return false;
+        } else
+            return true;
+    }
+
+    bool try_lock_exclusive() noexcept {
+        if (auto orig = atm->fetch_or(highest, std::memory_order_acq_rel); orig & highest)
+            return false;
+        else if (orig) {
+            atm->fetch_and(~highest, std::memory_order_release);
+            return false;
+        } else
+            return true;
+    }
+
+    void unlock_shared() noexcept {
+        atm->fetch_sub(1, std::memory_order_release);
+    }
+
+    void unlock_exclusive() noexcept {
+        atm->fetch_and(~highest, std::memory_order_release);
+    }
+};
+
+class WedgeLock : public Wedge {
+    unsigned state = 0;
+
+  public:
+    using Wedge::Wedge;
+
+    bool try_lock_shared() noexcept {
+        if (Wedge::try_lock_shared()) {
+            state = 1;
+            return true;
+        } else
+            return false;
+    }
+
+    bool try_lock_exclusive() noexcept {
+        if (Wedge::try_lock_exclusive()) {
+            state = 2;
+            return true;
+        } else
+            return false;
+    }
+
+    void unlock_shared() noexcept {
+        Wedge::unlock_shared();
+        state = 0;
+    }
+
+    void unlock_exclusive() noexcept {
+        Wedge::unlock_exclusive();
+        state = 0;
+    }
+
+    ~WedgeLock() {
+        if (state == 1)
+            unlock_shared();
+        else if (state == 2)
+            unlock_exclusive();
+    }
+};

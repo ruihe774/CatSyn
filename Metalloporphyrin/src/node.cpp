@@ -110,13 +110,14 @@ void setVideoInfo(const VSVideoInfo* vi, int numOutputs, VSNode* node) noexcept 
                                       "Metalloporphyrin: returning multiple clips are not supported (setVideoInfo)");
 }
 
-struct VSFilter final : Object, virtual catsyn::IFilter {
+struct VSFilter final : Object, virtual catsyn::IFilter1 {
     catsyn::VideoInfo vi;
     catsyn::FilterFlags flags;
     VSFilterGetFrame getFrame;
     VSFilterFree freer;
     mutable void* instanceData;
     mutable bool is_source_filter;
+    std::atomic_uint init_atomic;
 
     ~VSFilter() final;
 
@@ -126,6 +127,7 @@ struct VSFilter final : Object, virtual catsyn::IFilter {
     void process_frame(const catsyn::IFrame* const* input_frames, catsyn::FrameData** frame_data,
                        const catsyn::IFrame** out) const final;
     void drop_frame_data(catsyn::FrameData* frame_data) const noexcept final;
+    std::atomic_uint* get_thread_init_atomic() noexcept final;
 };
 
 static catsyn::VideoInfo vi_vs_to_cs(const VSVideoInfo& vvi) {
@@ -227,6 +229,10 @@ void VSFilter::process_frame(const catsyn::IFrame* const* input_frames, catsyn::
 void VSFilter::drop_frame_data(catsyn::FrameData* frame_data) const noexcept {
     if (frame_data)
         core->nucl->get_logger()->log(catsyn::LogLevel::WARNING, "VSFilter: frame data leaked");
+}
+
+std::atomic_uint* VSFilter::get_thread_init_atomic() noexcept {
+    return &init_atomic;
 }
 
 void queryCompletedFrame(VSNodeRef** node, int* n, VSFrameContext* frameCtx) noexcept {

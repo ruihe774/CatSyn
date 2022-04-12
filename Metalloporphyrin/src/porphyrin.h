@@ -11,7 +11,7 @@
 #include <tatabox.h>
 
 #include <cathelper.h>
-#include <catsyn.h>
+#include <catsyn_1.h>
 
 #define VS_CORE_EXPORTS
 #include <VapourSynth.h>

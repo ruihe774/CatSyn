@@ -14,4 +14,9 @@ class IFactory1 : virtual public IFactory {
     virtual void create_pathway(IPathway** out) noexcept = 0;
 };
 
+class IFilter1 : virtual public IFilter {
+  public:
+    virtual std::atomic_uint* get_thread_init_atomic() noexcept = 0;
+};
+
 } // namespace catsyn

@@ -95,23 +95,29 @@ void worker(Nucleus& nucl) {
         if (inst->taken.test_and_set(std::memory_order_acq_rel))
             return;
         auto substrate = inst->substrate.get();
-        std::unique_lock<std::shared_mutex> init_lock(substrate->init_mtx, std::defer_lock);
-        std::shared_lock<std::shared_mutex> proc_lock(substrate->init_mtx, std::defer_lock);
-        if (inited.contains(substrate)) {
-            if (!proc_lock.try_lock()) [[unlikely]]
-                goto repost;
-        } else [[unlikely]] {
-            if (init_lock.try_lock())
-                inited.emplace(substrate);
-            else
-                goto repost;
+        auto filter = substrate->filter.get();
+        std::atomic_uint* init_atomic = nullptr;
+        if (auto filter1 = dynamic_cast<IFilter1*>(filter); filter1)
+            init_atomic = filter1->get_thread_init_atomic();
+        WedgeLock lock;
+        if (init_atomic) {
+            WedgeLock inner{*init_atomic};
+            std::swap(lock, inner);
+            if (inited.contains(substrate)) {
+                if (!lock.try_lock_shared()) [[unlikely]]
+                    goto repost;
+            } else [[unlikely]] {
+                if (lock.try_lock_exclusive())
+                    inited.emplace(substrate);
+                else
+                    goto repost;
+            }
         }
         {
             boost::container::small_vector<const IFrame*, 10> input_frames;
             for (auto input : inst->inputs)
                 input_frames.push_back(input->product.get());
             cat_ptr<const IFrame> product;
-            auto filter = substrate->filter.get();
             try {
                 filter->process_frame(input_frames.data(), &inst->frame_data, product.put_const());
                 filter->drop_frame_data(inst->frame_data);
